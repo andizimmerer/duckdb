@@ -16,6 +16,7 @@
 #include "duckdb/common/unordered_map.hpp"
 #include "duckdb/planner/column_binding.hpp"
 #include "duckdb/common/column_index.hpp"
+#include "duckdb/execution/join_bloom_filter.hpp"
 
 namespace duckdb {
 class BaseStatistics;
@@ -117,14 +118,21 @@ class DynamicTableFilterSet {
 public:
 	void ClearFilters(const PhysicalOperator &op);
 	void PushFilter(const PhysicalOperator &op, idx_t column_index, unique_ptr<TableFilter> filter);
+	void PushBloomFilter(const PhysicalOperator &op, unique_ptr<JoinBloomFilter> bloom_filter);
 
 	bool HasFilters() const;
+	bool HasBloomFilters() const;
+
+JoinBloomFilter *GetPtrToLastBf(const PhysicalOperator &op);
 	unique_ptr<TableFilterSet> GetFinalTableFilters(const PhysicalTableScan &scan,
 	                                                optional_ptr<TableFilterSet> existing_filters) const;
+	
+	unique_ptr<vector<unique_ptr<JoinBloomFilter>>> GetBloomFilters() const;
 
 private:
 	mutable mutex lock;
 	reference_map_t<const PhysicalOperator, unique_ptr<TableFilterSet>> filters;
+	reference_map_t<const PhysicalOperator, vector<unique_ptr<JoinBloomFilter>>> bloom_filters;
 };
 
 } // namespace duckdb

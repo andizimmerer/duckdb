@@ -18,6 +18,7 @@
 #include "duckdb/common/types/vector.hpp"
 #include "duckdb/execution/aggregate_hashtable.hpp"
 #include "duckdb/execution/ht_entry.hpp"
+#include "duckdb/common/types/hyperloglog.hpp"
 
 namespace duckdb {
 
@@ -143,6 +144,7 @@ public:
 		// or matched against during probing
 		Vector rhs_row_locations;
 		Vector salt_v;
+		Vector ht_offsets_v;
 
 		SelectionVector salt_match_sel;
 		SelectionVector key_no_match_sel;
@@ -151,7 +153,6 @@ public:
 	struct ProbeState : SharedState {
 		ProbeState();
 
-		Vector ht_offsets_v;
 		Vector ht_offsets_dense_v;
 
 		SelectionVector non_empty_sel;
@@ -182,7 +183,11 @@ public:
 	//! Finalize the build of the HT, constructing the actual hash table and making the HT ready for probing.
 	//! Finalize must be called before any call to Probe, and after Finalize is called Build should no longer be
 	//! ever called.
-	void Finalize(idx_t chunk_idx_from, idx_t chunk_idx_to, bool parallel);
+	void Finalize(idx_t chunk_idx_from, idx_t chunk_idx_to, bool parallel, JoinBloomFilter *bloom_filter = nullptr);
+	void InitializeScanStructure(ScanStructure &scan_structure, DataChunk &keys, TupleDataChunkState &key_state,
+	                             const SelectionVector *&current_sel);
+	//! Pre-compute hashes for the given keys.
+	void Hash(DataChunk &keys, const SelectionVector &sel, idx_t count, Vector &hashes);
 	//! Probe the HT with the given input chunk, resulting in the given result
 	void Probe(ScanStructure &scan_structure, DataChunk &keys, TupleDataChunkState &key_state, ProbeState &probe_state,
 	           optional_ptr<Vector> precomputed_hashes = nullptr);
@@ -191,6 +196,8 @@ public:
 
 	//! Fill the pointer with all the addresses from the hashtable for full scan
 	static idx_t FillWithHTOffsets(JoinHTScanState &state, Vector &addresses);
+
+	idx_t CollectTruncatedHashes(Vector &hashes);
 
 	idx_t Count() const {
 		return data_collection->Count();
@@ -267,7 +274,11 @@ public:
 	uint64_t bitmask = DConstants::INVALID_INDEX;
 	//! Whether or not we error on multiple rows found per match in a SINGLE join
 	bool single_join_error_on_multiple_rows = true;
-
+	//! HLL sketch of the build side to estimate the number of distinct values before the hash table is finalized.
+	HyperLogLog build_side_hll;
+public:
+	// TODO: move this somewhere else outside of hash table.
+	bool should_build_bloom_filter = false;
 	struct {
 		mutex mj_lock;
 		//! The types of the duplicate eliminated columns, only used in correlated MARK JOIN for flattening
@@ -286,10 +297,6 @@ public:
 	} correlated_mark_join_info;
 
 private:
-	void InitializeScanStructure(ScanStructure &scan_structure, DataChunk &keys, TupleDataChunkState &key_state,
-	                             const SelectionVector *&current_sel);
-	void Hash(DataChunk &keys, const SelectionVector &sel, idx_t count, Vector &hashes);
-
 	bool UseSalt() const;
 
 	//! Gets a pointer to the entry in the HT for each of the hashes_v using linear probing. Will update the
@@ -391,7 +398,7 @@ public:
 		return PointerTableCapacity(count) * sizeof(data_ptr_t);
 	}
 
-	//! Get total size of HT if all partitions would be built
+	//! Get total size in bytes of HT if all partitions would be built
 	idx_t GetTotalSize(const vector<unique_ptr<JoinHashTable>> &local_hts, idx_t &max_partition_size,
 	                   idx_t &max_partition_count) const;
 	idx_t GetTotalSize(const vector<idx_t> &partition_sizes, const vector<idx_t> &partition_counts,

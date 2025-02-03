@@ -18,6 +18,7 @@
 #include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb/parser/parsed_data/sample_options.hpp"
 #include "duckdb/storage/storage_index.hpp"
+#include "duckdb/execution/join_bloom_filter.hpp"
 
 namespace duckdb {
 class AdaptiveFilter;
@@ -138,10 +139,14 @@ class ScanFilterInfo {
 public:
 	~ScanFilterInfo();
 
-	void Initialize(TableFilterSet &filters, const vector<StorageIndex> &column_ids);
+	void Initialize(TableFilterSet &filters, const vector<StorageIndex> &column_ids, vector<unique_ptr<JoinBloomFilter>> &bloom_filters);
 
 	const vector<ScanFilter> &GetFilterList() const {
 		return filter_list;
+	}
+
+	const vector<unique_ptr<JoinBloomFilter>> &GetBloomFilterList() const {
+		return bloom_filter_list;
 	}
 
 	optional_ptr<AdaptiveFilter> GetAdaptiveFilter();
@@ -151,8 +156,13 @@ public:
 	//! Whether or not there is any filter we need to execute
 	bool HasFilters() const;
 
+	//! Whether there are any Bloom-filters
+	bool HasBloomFilters() const;
+
 	//! Whether or not there is a filter we need to execute for this column currently
-	bool ColumnHasFilters(idx_t col_idx);
+	bool ColumnHasFilters(idx_t col_idx) const;
+
+	bool ColumnHasBloomFilters(idx_t col_idx) const;
 
 	//! Resets any SetFilterAlwaysTrue flags
 	void CheckAllFilters();
@@ -167,10 +177,14 @@ private:
 	unique_ptr<AdaptiveFilter> adaptive_filter;
 	//! The set of filters
 	vector<ScanFilter> filter_list;
+	//! List of Bloom-filters created from joins
+	vector<unique_ptr<JoinBloomFilter>> bloom_filter_list;
 	//! Whether or not the column has a filter active right now
 	unsafe_vector<bool> column_has_filter;
 	//! Whether or not the column has a filter active at all
 	unsafe_vector<bool> base_column_has_filter;
+	//! Wether or not the column has a Bloom filter active right now
+	unsafe_vector<bool> column_has_bloom_filter;
 	//! The amount of filters that are always true currently
 	idx_t always_true_filters = 0;
 };
@@ -178,6 +192,8 @@ private:
 class CollectionScanState {
 public:
 	explicit CollectionScanState(TableScanState &parent_p);
+
+	~CollectionScanState();
 
 	//! The current row_group we are scanning
 	RowGroup *row_group;
@@ -252,7 +268,7 @@ public:
 	ScanSamplingInfo sampling_info;
 
 public:
-	void Initialize(vector<StorageIndex> column_ids, optional_ptr<TableFilterSet> table_filters = nullptr,
+	void Initialize(vector<StorageIndex> column_ids, optional_ptr<TableFilterSet> table_filters = nullptr, optional_ptr<vector<unique_ptr<JoinBloomFilter>>> bloom_filters = nullptr,
 	                optional_ptr<SampleOptions> table_sampling = nullptr);
 
 	const vector<StorageIndex> &GetColumnIds();

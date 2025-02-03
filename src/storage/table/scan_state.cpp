@@ -7,6 +7,7 @@
 #include "duckdb/storage/table/row_group_collection.hpp"
 #include "duckdb/storage/table/row_group_segment_tree.hpp"
 #include "duckdb/transaction/duck_transaction.hpp"
+#include <iostream>
 
 namespace duckdb {
 
@@ -14,13 +15,27 @@ TableScanState::TableScanState() : table_state(*this), local_state(*this) {
 }
 
 TableScanState::~TableScanState() {
+	auto &info = GetFilterInfo();
+	auto &bfs = info.GetBloomFilterList();
+	
+	std::cout << "    \"num_bloom_filters_in_scan\": " << bfs.size() << "," << std::endl;
+	for (auto &bf : bfs) {
+		std::cout << "    \"selectivity\": " << bf->GetObservedSelectivity() << "," << std::endl;
+		std::cout << "    \"probed_keys\": " << bf->GetNumProbedKeys() << "," << std::endl;
+		std::cout << "    \"probe_time\": " << bf->probe_time << "," << std::endl;
+		//std::cout << "    \"build_time\": " << bf->build_time << "," << std::endl;
+		std::cout << "    \"hash_time\": " << bf->hash_time << "," << std::endl;
+	}		
 }
 
-void TableScanState::Initialize(vector<StorageIndex> column_ids_p, optional_ptr<TableFilterSet> table_filters,
+void TableScanState::Initialize(vector<StorageIndex> column_ids_p, optional_ptr<TableFilterSet> table_filters, optional_ptr<vector<unique_ptr<JoinBloomFilter>>> bloom_filters,
                                 optional_ptr<SampleOptions> table_sampling) {
 	this->column_ids = std::move(column_ids_p);
-	if (table_filters) {
-		filters.Initialize(*table_filters, column_ids);
+	if (table_filters && bloom_filters) {
+		filters.Initialize(*table_filters, column_ids, *bloom_filters);
+	} else if (table_filters) {
+		vector<unique_ptr<JoinBloomFilter>> bfs;
+		filters.Initialize(*table_filters, column_ids, bfs);
 	}
 	if (table_sampling) {
 		sampling_info.do_system_sample = table_sampling->method == SampleMethod::SYSTEM_SAMPLE;
@@ -49,7 +64,7 @@ ScanFilter::ScanFilter(idx_t index, const vector<StorageIndex> &column_ids, Tabl
       always_true(false) {
 }
 
-void ScanFilterInfo::Initialize(TableFilterSet &filters, const vector<StorageIndex> &column_ids) {
+void ScanFilterInfo::Initialize(TableFilterSet &filters, const vector<StorageIndex> &column_ids, vector<unique_ptr<JoinBloomFilter>> &bloom_filters) {
 	D_ASSERT(!filters.filters.empty());
 	table_filters = &filters;
 	adaptive_filter = make_uniq<AdaptiveFilter>(filters);
@@ -57,17 +72,45 @@ void ScanFilterInfo::Initialize(TableFilterSet &filters, const vector<StorageInd
 	for (auto &entry : filters.filters) {
 		filter_list.emplace_back(entry.first, column_ids, *entry.second);
 	}
+	bloom_filter_list.reserve(bloom_filters.size());
+	for (auto &entry : bloom_filters) {
+		bloom_filter_list.push_back(make_uniq<JoinBloomFilter>(entry->Copy()));
+	}
+
+	// Collect if a column is used in any filter.
 	column_has_filter.reserve(column_ids.size());
 	for (idx_t col_idx = 0; col_idx < column_ids.size(); col_idx++) {
 		bool has_filter = table_filters->filters.find(col_idx) != table_filters->filters.end();
+		
 		column_has_filter.push_back(has_filter);
 	}
 	base_column_has_filter = column_has_filter;
+
+	// Collect if a column is used in any Bloom-filter.
+	for (idx_t col_idx = 0; col_idx < column_ids.size(); col_idx++) {
+		bool has_bloom_filter = false;
+		for (auto &bf : bloom_filters) {
+			for (auto bf_col_idx : bf->GetColumnIds()) {
+				if (bf_col_idx == col_idx) {
+					has_bloom_filter = true;
+				}
+			}
+		}
+		column_has_bloom_filter.push_back(has_bloom_filter);
+	}
 }
 
-bool ScanFilterInfo::ColumnHasFilters(idx_t column_idx) {
+bool ScanFilterInfo::ColumnHasFilters(idx_t column_idx) const {
 	if (column_idx < column_has_filter.size()) {
 		return column_has_filter[column_idx];
+	} else {
+		return false;
+	}
+}
+
+bool ScanFilterInfo::ColumnHasBloomFilters(idx_t column_idx) const {
+	if (column_idx < column_has_bloom_filter.size()) {
+		return column_has_bloom_filter[column_idx];
 	} else {
 		return false;
 	}
@@ -80,6 +123,10 @@ bool ScanFilterInfo::HasFilters() const {
 	}
 	// if we have filters - check if we need to check any of them
 	return always_true_filters < filter_list.size();
+}
+
+bool ScanFilterInfo::HasBloomFilters() const {
+	return !bloom_filter_list.empty();
 }
 
 void ScanFilterInfo::CheckAllFilters() {
@@ -168,6 +215,10 @@ ParallelCollectionScanState::ParallelCollectionScanState()
 CollectionScanState::CollectionScanState(TableScanState &parent_p)
     : row_group(nullptr), vector_index(0), max_row_group_row(0), row_groups(nullptr), max_row(0), batch_index(0),
       valid_sel(STANDARD_VECTOR_SIZE), random(-1), parent(parent_p) {
+}
+
+CollectionScanState::~CollectionScanState() {
+	
 }
 
 bool CollectionScanState::Scan(DuckTransaction &transaction, DataChunk &result) {

@@ -6,6 +6,7 @@
 #include "duckdb/execution/ht_entry.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
+#include <iostream>
 
 namespace duckdb {
 using ValidityBytes = JoinHashTable::ValidityBytes;
@@ -14,12 +15,12 @@ using ProbeSpill = JoinHashTable::ProbeSpill;
 using ProbeSpillLocalState = JoinHashTable::ProbeSpillLocalAppendState;
 
 JoinHashTable::SharedState::SharedState()
-    : rhs_row_locations(LogicalType::POINTER), salt_v(LogicalType::UBIGINT), salt_match_sel(STANDARD_VECTOR_SIZE),
+    : rhs_row_locations(LogicalType::POINTER), salt_v(LogicalType::UBIGINT), ht_offsets_v(LogicalType::UBIGINT), salt_match_sel(STANDARD_VECTOR_SIZE),
       key_no_match_sel(STANDARD_VECTOR_SIZE) {
 }
 
 JoinHashTable::ProbeState::ProbeState()
-    : SharedState(), ht_offsets_v(LogicalType::UBIGINT), ht_offsets_dense_v(LogicalType::UBIGINT),
+    : SharedState(), ht_offsets_dense_v(LogicalType::UBIGINT),
       non_empty_sel(STANDARD_VECTOR_SIZE) {
 }
 
@@ -34,7 +35,7 @@ JoinHashTable::JoinHashTable(ClientContext &context, const vector<JoinCondition>
     : buffer_manager(BufferManager::GetBufferManager(context)), conditions(conditions_p),
       build_types(std::move(btypes)), output_columns(output_columns_p), entry_size(0), tuple_size(0),
       vfound(Value::BOOLEAN(false)), join_type(type_p), finalized(false), has_null(false),
-      radix_bits(INITIAL_RADIX_BITS) {
+      radix_bits(INITIAL_RADIX_BITS), build_side_hll(HyperLogLog()) {
 	for (idx_t i = 0; i < conditions.size(); ++i) {
 		auto &condition = conditions[i];
 		D_ASSERT(condition.left->return_type == condition.right->return_type);
@@ -132,25 +133,29 @@ void JoinHashTable::Merge(JoinHashTable &other) {
 	}
 
 	sink_collection->Combine(*other.sink_collection);
+	build_side_hll.Merge(other.build_side_hll);
 }
 
-static void ApplyBitmaskAndGetSaltBuild(Vector &hashes_v, Vector &salt_v, const idx_t &count, const idx_t &bitmask) {
+static void ApplyBitmaskAndGetSaltBuild(const Vector &hashes_v, Vector &ht_offsets_v, Vector &salt_v, const idx_t &count, const idx_t &bitmask) {
+	const auto &hashes = ConstantVector::GetData<hash_t>(hashes_v);
 	if (hashes_v.GetVectorType() == VectorType::CONSTANT_VECTOR) {
-		auto &hash = *ConstantVector::GetData<hash_t>(hashes_v);
-		salt_v.SetVectorType(VectorType::CONSTANT_VECTOR);
+		
 
-		*ConstantVector::GetData<hash_t>(salt_v) = ht_entry_t::ExtractSalt(hash);
+		salt_v.SetVectorType(VectorType::CONSTANT_VECTOR);
+		ht_offsets_v.SetVectorType(VectorType::CONSTANT_VECTOR);
+
+		*ConstantVector::GetData<hash_t>(salt_v) = ht_entry_t::ExtractSalt(*hashes);
 		salt_v.Flatten(count);
 
-		hash = hash & bitmask;
-		hashes_v.Flatten(count);
+		*ConstantVector::GetData<hash_t>(ht_offsets_v) = *hashes & bitmask;
+		ht_offsets_v.Flatten(count);
 	} else {
-		hashes_v.Flatten(count);
+		ht_offsets_v.Flatten(count);
 		auto salts = FlatVector::GetData<hash_t>(salt_v);
-		auto hashes = FlatVector::GetData<hash_t>(hashes_v);
+		auto ht_offsets = FlatVector::GetData<hash_t>(ht_offsets_v);
 		for (idx_t i = 0; i < count; i++) {
 			salts[i] = ht_entry_t::ExtractSalt(hashes[i]);
-			hashes[i] &= bitmask;
+			ht_offsets[i] = hashes[i] & bitmask;
 		}
 	}
 }
@@ -167,7 +172,6 @@ static inline void GetRowPointersInternal(DataChunk &keys, TupleDataChunkState &
 
 	auto hashes = UnifiedVectorFormat::GetData<hash_t>(hashes_v_unified);
 	auto salts = FlatVector::GetData<hash_t>(state.salt_v);
-
 	auto ht_offsets = FlatVector::GetData<idx_t>(state.ht_offsets_v);
 	auto ht_offsets_dense = FlatVector::GetData<idx_t>(state.ht_offsets_dense_v);
 
@@ -408,6 +412,11 @@ void JoinHashTable::Build(PartitionedTupleDataAppendState &append_state, DataChu
 	source_chunk.data[col_offset].Reference(hash_values);
 	hash_values.ToUnifiedFormat(source_chunk.size(), append_state.chunk_state.vector_data.back().unified);
 
+	auto* h = UnifiedVectorFormat::GetData<hash_t>(append_state.chunk_state.vector_data.back().unified);
+	for (idx_t i = 0; i < source_chunk.size(); i++) {
+		build_side_hll.InsertElement(h[i]);
+	}
+
 	// We already called TupleDataCollection::ToUnifiedFormat, so we can AppendUnified here
 	sink_collection->AppendUnified(append_state, source_chunk, *current_sel, added_count);
 }
@@ -554,10 +563,10 @@ static void InsertHashesLoop(atomic<ht_entry_t> entries[], Vector &row_locations
                              JoinHashTable::InsertState &state, const TupleDataCollection &data_collection,
                              JoinHashTable &ht) {
 	D_ASSERT(hashes_v.GetType().id() == LogicalType::HASH);
-	ApplyBitmaskAndGetSaltBuild(hashes_v, state.salt_v, count, ht.bitmask);
+	ApplyBitmaskAndGetSaltBuild(hashes_v, state.ht_offsets_v, state.salt_v, count, ht.bitmask);
 
 	// the salts offset for each row to insert
-	const auto ht_offsets = FlatVector::GetData<idx_t>(hashes_v);
+	const auto ht_offsets = FlatVector::GetData<idx_t>(state.ht_offsets_v);
 	const auto hash_salts = FlatVector::GetData<hash_t>(state.salt_v);
 	// the row locations of the rows that are already in the hash table
 	const auto rhs_row_locations = FlatVector::GetData<data_ptr_t>(state.rhs_row_locations);
@@ -705,7 +714,7 @@ void JoinHashTable::InitializePointerTable() {
 	bitmask = capacity - 1;
 }
 
-void JoinHashTable::Finalize(idx_t chunk_idx_from, idx_t chunk_idx_to, bool parallel) {
+void JoinHashTable::Finalize(idx_t chunk_idx_from, idx_t chunk_idx_to, bool parallel, JoinBloomFilter *bloom_filter) {
 	// Pointer table should be allocated
 	D_ASSERT(hash_map.get());
 
@@ -716,16 +725,26 @@ void JoinHashTable::Finalize(idx_t chunk_idx_from, idx_t chunk_idx_to, bool para
 	                                chunk_idx_to, false);
 	const auto row_locations = iterator.GetRowLocations();
 
+	//std::unordered_set<hash_t> uniq_hashes;
+
 	InsertState insert_state(*this);
 	do {
 		const auto count = iterator.GetCurrentChunkCount();
 		for (idx_t i = 0; i < count; i++) {
 			hash_data[i] = Load<hash_t>(row_locations[i] + pointer_offset);
+			//uniq_hashes.insert(hash_data[i]);
 		}
 		TupleDataChunkState &chunk_state = iterator.GetChunkState();
 
+		// Build Bloom-filter before inserting hashes into the hash table because InsertHashes() truncates the hash values in-place.
+		if (bloom_filter) {
+			const SelectionVector sel;
+			bloom_filter->BuildWithPrecomputedHashes(hashes, sel, count);
+		}
 		InsertHashes(hashes, count, chunk_state, insert_state, parallel);
 	} while (iterator.Next());
+
+	//std::cout << "    \"distinct_values_build_side\": " << uniq_hashes.size() << "," << std::endl;
 }
 
 void JoinHashTable::InitializeScanStructure(ScanStructure &scan_structure, DataChunk &keys,
@@ -1384,6 +1403,34 @@ idx_t JoinHashTable::FillWithHTOffsets(JoinHTScanState &state, Vector &addresses
 	} while (iterator.Next());
 
 	return key_count;
+}
+
+idx_t JoinHashTable::CollectTruncatedHashes(Vector &hashes) {
+	D_ASSERT(hashes.GetVectorType() == VectorType::FLAT_VECTOR);
+	auto hash_ptr = FlatVector::GetData<hash_t>(hashes);
+	hash_t last_salt = 0;
+	idx_t num_hashes = 0;
+	for (idx_t i = 0; i < capacity; i++) {
+		auto &entry = entries[i];
+		bool occupied = entry.IsOccupied();
+		if (entry.IsOccupied()) {
+			hash_t cur_salt = entry.GetSalt();
+			if (cur_salt!=last_salt) {
+				last_salt = cur_salt;
+
+				hash_ptr[num_hashes] = cur_salt ^ i;
+				num_hashes++;
+			}
+		}
+	}
+	
+	unordered_set<hash_t> uniq;
+	for (int i=0;i<num_hashes;i++) {
+		uniq.insert(hash_ptr[i]);
+	}
+	D_ASSERT(uniq.size() == num_hashes);
+	std::cout << "    \"distinct_values_build_side\": " << num_hashes << "," << std::endl;
+	return num_hashes;
 }
 
 idx_t JoinHashTable::GetTotalSize(const vector<idx_t> &partition_sizes, const vector<idx_t> &partition_counts,

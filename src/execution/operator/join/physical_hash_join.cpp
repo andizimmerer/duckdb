@@ -2,6 +2,7 @@
 
 #include "duckdb/common/radix_partitioning.hpp"
 #include "duckdb/common/types/value_map.hpp"
+#include "duckdb/execution/join_bloom_filter.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/execution/operator/aggregate/ungrouped_aggregate_state.hpp"
 #include "duckdb/function/aggregate/distributive_function_utils.hpp"
@@ -26,6 +27,7 @@
 #include "duckdb/storage/buffer_manager.hpp"
 #include "duckdb/storage/storage_manager.hpp"
 #include "duckdb/storage/temporary_memory_manager.hpp"
+#include <iostream>
 
 namespace duckdb {
 
@@ -203,6 +205,8 @@ public:
 
 	bool skip_filter_pushdown = false;
 	unique_ptr<JoinFilterGlobalState> global_filter_state;
+
+	bool build_bloom_fitler = false;
 };
 
 unique_ptr<JoinFilterLocalState> JoinFilterPushdownInfo::GetLocalState(JoinFilterGlobalState &gstate) const {
@@ -427,7 +431,34 @@ public:
 	}
 
 	TaskExecutionResult ExecuteTask(TaskExecutionMode mode) override {
-		sink.hash_table->Finalize(chunk_idx_from, chunk_idx_to, parallel);
+		// TODO: why does one hash join has multiple probe infos? can we just copy the bloom filter between them?
+		if (sink.hash_table->should_build_bloom_filter) {
+			vector<column_t> column_ids;
+			size_t approx_ndv = sink.hash_table->build_side_hll.Count();
+			auto bf = make_uniq<JoinBloomFilter>(approx_ndv, 0.01, std::move(column_ids), 0xffffffff);
+			//auto bf = make_uniq<JoinBloomFilter>(std::move(column_ids), /*num_hash_funcs=*/4, /*size=*/8388608);  // Fixed-sized bloom filter
+
+			sink.hash_table->Finalize(chunk_idx_from, chunk_idx_to, parallel, bf.get());
+
+			std::cout << "    \"bf_num_hash_functions\": " << bf->GetNumHashFunctions() << "," << std::endl;
+			std::cout << "    \"bf_size_bits\": " << bf->GetSizeBits() << "," << std::endl;
+			std::cout << "    \"bf_scarcity\": " << bf->GetScarcity() << "," << std::endl;
+			std::cout << "    \"bf_inserted_keys\": " << bf->GetNumInsertedRows() << "," << std::endl;
+			std::cout << "    \"bf_bitmask\": " << bf->bitmask << "," << std::endl;
+			std::cout << "    \"build_time\": " << bf->build_time << "," << std::endl;
+
+			for (auto &info : sink.op.filter_pushdown->probe_info) {
+				vector<column_t> column_ids;
+				auto bf_c = bf->Copy();
+				std::transform(info.columns.cbegin(), info.columns.cend(), std::back_inserter(bf->GetColumnIds()), [&](const JoinFilterPushdownColumn &i) {return i.probe_column_index.column_index;});
+				if (bf->GetScarcity() <= 0.34) {
+					// only use bloom filter for probing if it's false-positive-rate is low enough (<=1.3%)
+					info.dynamic_filters->PushBloomFilter(*op.get(), std::move(bf));
+				}
+			}
+		} else {
+			sink.hash_table->Finalize(chunk_idx_from, chunk_idx_to, parallel);
+		}
 		event->FinishTask();
 		return TaskExecutionResult::TASK_FINISHED;
 	}
@@ -483,6 +514,49 @@ public:
 	void FinishEvent() override {
 		sink.hash_table->GetDataCollection().VerifyEverythingPinned();
 		sink.hash_table->finalized = true;
+
+		// Hash table is finished. Now we can build the Bloom-filter based on the hash table keys.
+		/*
+		if (sink.hash_table->should_build_bloom_filter) {
+			Vector hashes(LogicalType::HASH, sink.hash_table->capacity);
+			auto hash_cnt = sink.hash_table->CollectTruncatedHashes(hashes);
+			vector<column_t> column_ids;
+			auto bf = make_uniq<JoinBloomFilter>(hash_cnt, 0.01, std::move(column_ids), sink.hash_table->bitmask);
+			
+
+			Vector hashvals(LogicalType::HASH);
+			auto hash_data = FlatVector::GetData<hash_t>(hashvals);
+
+			TupleDataChunkIterator iterator(sink.hash_table->GetDataCollection(), TupleDataPinProperties::KEEP_EVERYTHING_PINNED, false);
+			const auto row_locations = iterator.GetRowLocations();
+
+			do {
+				const auto count = iterator.GetCurrentChunkCount();
+				for (idx_t i = 0; i < count; i++) {
+					hash_data[i] = Load<hash_t>(row_locations[i] + sink.hash_table->pointer_offset);
+				}
+
+				const SelectionVector sel;
+				bf->BuildWithPrecomputedHashes(hashvals, sel, count);
+			} while (iterator.Next());
+
+
+
+			std::cout << "    \"bf_num_hash_functions\": " << bf->GetNumHashFunctions() << "," << std::endl;
+			std::cout << "    \"bf_size_bits\": " << bf->GetSizeBits() << "," << std::endl;
+			std::cout << "    \"bf_scarcity\": " << bf->GetScarcity() << "," << std::endl;
+			std::cout << "    \"bf_inserted_keys\": " << bf->GetNumInsertedRows() << "," << std::endl;
+			std::cout << "    \"bf_bitmask\": " << bf->bitmask << "," << std::endl;
+
+			for (auto &info : sink.op.filter_pushdown->probe_info) {
+				vector<column_t> column_ids;
+				auto bf_c = bf->Copy();
+				std::transform(info.columns.cbegin(), info.columns.cend(), std::back_inserter(bf->GetColumnIds()), [&](const JoinFilterPushdownColumn &i) {return i.probe_column_index.column_index;});
+				info.dynamic_filters->PushBloomFilter(sink.op, std::move(bf));
+			}
+		}
+		*/
+
 	}
 
 	static constexpr idx_t PARALLEL_CONSTRUCT_THRESHOLD = 1048576;
@@ -622,7 +696,7 @@ void JoinFilterPushdownInfo::PushInFilter(const JoinFilterPushdownFilter &info, 
 	data_collection.Gather(tuples_addresses, *FlatVector::IncrementalSelectionVector(), key_count, build_idx,
 	                       build_vector, *FlatVector::IncrementalSelectionVector(), nullptr);
 
-	// generate the OR-clause - note that we only need to consider unique values here (so we use a seT)
+	// generate the OR-clause - note that we only need to consider unique values here (so we use a set)
 	value_set_t unique_ht_values;
 	for (idx_t k = 0; k < key_count; k++) {
 		unique_ht_values.insert(build_vector.GetValue(k));
@@ -647,6 +721,34 @@ void JoinFilterPushdownInfo::PushInFilter(const JoinFilterPushdownFilter &info, 
 	return;
 }
 
+void JoinFilterPushdownInfo::BuildAndPushBloomFilter(const JoinFilterPushdownFilter &info, JoinHashTable &ht,
+                                          const PhysicalOperator &op, vector<column_t> column_ids) const {
+	auto bf = make_uniq<JoinBloomFilter>(ht.Count(), 0.01, std::move(column_ids), 0);
+	//auto bf = make_shared_ptr<JoinBloomFilter>(std::move(column_ids), ht.CurrentPartitionCount(), 0.01);  // TODO: maybe??
+
+	// FIXME: this code is duplicated from building the hash table.
+	auto &data_collection = ht.GetDataCollection();
+
+	Vector hashes(LogicalType::HASH);
+	auto hash_data = FlatVector::GetData<hash_t>(hashes);
+
+	TupleDataChunkIterator iterator(data_collection, TupleDataPinProperties::KEEP_EVERYTHING_PINNED, 0,
+	                                data_collection.ChunkCount(), false);
+	const auto row_locations = iterator.GetRowLocations();
+
+	do {
+		const auto count = iterator.GetCurrentChunkCount();
+		for (idx_t i = 0; i < count; i++) {
+			hash_data[i] = Load<hash_t>(row_locations[i] + ht.pointer_offset);
+		}
+
+		const SelectionVector sel;  // Default selection, because we collected from the data collection.
+		bf->BuildWithPrecomputedHashes(hashes, sel, count);	
+	} while (iterator.Next());
+
+	info.dynamic_filters->PushBloomFilter(op, std::move(bf));
+}
+
 unique_ptr<DataChunk> JoinFilterPushdownInfo::Finalize(ClientContext &context, JoinHashTable &ht,
                                                        JoinFilterGlobalState &gstate,
                                                        const PhysicalOperator &op) const {
@@ -661,7 +763,7 @@ unique_ptr<DataChunk> JoinFilterPushdownInfo::Finalize(ClientContext &context, J
 	gstate.global_aggregate_state->Finalize(*final_min_max);
 
 	if (probe_info.empty()) {
-		return final_min_max; // There are not table souces in which we can push down filters
+		return final_min_max; // There are no table souces in which we can push down filters
 	}
 
 	auto dynamic_or_filter_threshold = ClientConfig::GetSetting<DynamicOrFilterThresholdSetting>(context);
@@ -701,11 +803,45 @@ unique_ptr<DataChunk> JoinFilterPushdownInfo::Finalize(ClientContext &context, J
 		}
 	}
 
+	// Build Bloom-filters for sideways-information-passing
+	auto hash_join_bloom_filter = ClientConfig::GetSetting<HashJoinBloomFilterSetting>(context);
+	if (hash_join_bloom_filter) {
+		size_t build_side_original_cardinality = 0;
+		const auto& build_side_children = op.children[1]->GetSources();
+		for (const PhysicalOperator &s : build_side_children) {
+			//auto &info = op.GetProfilingInfo();
+			//auto cardinality = info.GetMetricAsString(MetricsType::OPERATOR_CARDINALITY);
+			//const PhysicalTableScan &ts = s.Cast<PhysicalTableScan>();
+			build_side_original_cardinality += s.estimated_cardinality; // ??
+		}
+		double build_side_selectivity = 1.0 - (static_cast<double>(ht.Count()) / static_cast<double>(build_side_original_cardinality));
+
+		if (ht.Count() > dynamic_or_filter_threshold) {
+			ht.should_build_bloom_filter = true;
+
+			
+
+			//for (auto &info : probe_info) {
+				//vector<column_t> column_ids;
+				//std::transform(info.columns.cbegin(), info.columns.cend(), std::back_inserter(column_ids), [&](const JoinFilterPushdownColumn &i) {return i.probe_column_index.column_index;});
+
+				// We initialize a Bloom-filter. Actual building of it will be done as part of hashtable build.
+				//auto bf = make_uniq<JoinBloomFilter>(ht.Count(), 0.01, std::move(column_ids));
+				//info.dynamic_filters->PushBloomFilter(op, std::move(bf));
+				//gstate.bloom_filter = info.dynamic_filters->GetPtrToLastBf(op);
+				//BuildAndPushBloomFilter(info, ht, op, column_ids);
+			//}
+		} else {
+			Logger::Info(context, "Not building a Bloom-filter because the number of rows on the build side %u is smaller than the threshold %u", ht.Count(), dynamic_or_filter_threshold);
+		}
+	}
+
 	return final_min_max;
 }
 
 SinkFinalizeType PhysicalHashJoin::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
                                             OperatorSinkFinalizeInput &input) const {
+	//std::cout << "we are in PhysicalHashJoin::Finalize" << std::endl;
 	auto &sink = input.global_state.Cast<HashJoinGlobalSinkState>();
 	auto &ht = *sink.hash_table;
 
@@ -1227,7 +1363,7 @@ void HashJoinLocalSourceState::ExternalBuild(HashJoinGlobalSinkState &sink, Hash
 	D_ASSERT(local_stage == HashJoinSourceStage::BUILD);
 
 	auto &ht = *sink.hash_table;
-	ht.Finalize(build_chunk_idx_from, build_chunk_idx_to, true);
+	ht.Finalize(build_chunk_idx_from, build_chunk_idx_to, true, sink.global_filter_state->bloom_filter);
 
 	auto guard = gstate.Lock();
 	gstate.build_chunk_done += build_chunk_idx_to - build_chunk_idx_from;

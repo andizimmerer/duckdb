@@ -550,7 +550,7 @@ idx_t ColumnSegment::FilterSelection(SelectionVector &sel, Vector &vector, Unifi
 		                       approved_tuple_count);
 	}
 	default:
-		throw InternalException("FIXME: unsupported type for filter selection");
+		throw InternalException("FIXME: unsupported type for filter selection. Got " + EnumUtil::ToString(filter.filter_type));
 	}
 }
 

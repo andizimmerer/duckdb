@@ -510,6 +510,7 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 			return;
 		}
 		idx_t current_row = state.vector_index * STANDARD_VECTOR_SIZE;
+		//! The maximum possible number of rows that is scanned in this iteration. Up to STANDARD_VECTOR_SIZE.
 		auto max_count = MinValue<idx_t>(STANDARD_VECTOR_SIZE, state.max_row_group_row - current_row);
 
 		// check the sampling info if we have to sample this chunk
@@ -564,7 +565,7 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 			buffer_manager.Prefetch(prefetch_state.blocks);
 		}
 
-		bool has_filters = filter_info.HasFilters();
+		bool has_filters = filter_info.HasFilters() || filter_info.HasBloomFilters();
 		if (count == max_count && !has_filters) {
 			// scan all vectors completely: full scan without deletions or table filters
 			for (idx_t i = 0; i < column_ids.size(); i++) {
@@ -598,6 +599,8 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 			auto filter_state = filter_info.BeginFilter();
 			if (has_filters) {
 				D_ASSERT(ALLOW_UPDATES);
+
+				// Evaluate table filters before Bloom-filters.
 				auto &filter_list = filter_info.GetFilterList();
 				for (idx_t i = 0; i < filter_list.size(); i++) {
 					auto filter_idx = adaptive_filter->permutation[i];
@@ -644,20 +647,67 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 						                               approved_tuple_count);
 
 					} else {
-						auto &col_data = GetColumn(filter.table_column_index);
+						auto &col_data = GetColumn(column_idx);
 						col_data.Filter(transaction, state.vector_index, state.column_scans[scan_idx], result_vector,
 						                sel, approved_tuple_count, filter.filter);
 					}
 				}
-				for (auto &table_filter : filter_list) {
-					if (table_filter.IsAlwaysTrue()) {
-						continue;
+
+
+
+				// Evaluate Bloom-filters after table filters.
+				auto &bloom_filter_list = filter_info.GetBloomFilterList();
+				if (approved_tuple_count > 0 && bloom_filter_list.size() > 0) {
+					// Load columns if they are used by a Bloom-filter and have not been loaded as part of table filters yet.
+					for (idx_t i = 0; i < column_ids.size(); i++) {
+						if (filter_info.ColumnHasBloomFilters(i) && !filter_info.ColumnHasFilters(i)) {
+							auto &column = column_ids[i];
+							if (column.IsRowIdColumn()) {
+								D_ASSERT(result.data[i].GetType().InternalType() == ROW_TYPE);
+								result.data[i].SetVectorType(VectorType::FLAT_VECTOR);
+								auto result_data = FlatVector::GetData<int64_t>(result.data[i]);
+								for (size_t sel_idx = 0; sel_idx < approved_tuple_count; sel_idx++) {
+									result_data[sel_idx] =
+										UnsafeNumericCast<int64_t>(this->start + current_row + sel.get_index(sel_idx));
+								}
+							} else {
+								auto &col_data = GetColumn(column);
+								col_data.Scan(transaction, state.vector_index, state.column_scans[i], result.data[i]);
+							}
+						}
 					}
-					result.data[table_filter.scan_column_index].Slice(sel, approved_tuple_count);
+
+					// Evaluate Bloom-filters
+					if (true){
+					for (auto &bf : bloom_filter_list) {
+						if (bf->GetNumProbedKeys() < 4000 || bf->GetObservedSelectivity() >= 0.6) {
+							Vector hashes(LogicalType::HASH);
+							// TODO: Can we directly put the keys and hashes into the hash join's state so that we don't have to perform hashing twice?
+							Profiler p;
+							p.Start();
+							result.Hash(bf->GetColumnIds(), sel, approved_tuple_count, hashes);
+							p.End();
+							bf->hash_time += p.Elapsed();
+							approved_tuple_count = bf->ProbeWithPrecomputedHashes(sel, approved_tuple_count, hashes);
+							//std::cerr << "selectivity: " << bf->GetObservedSelectivity() << std::endl;
+						}
+
+						if (approved_tuple_count == 0) {
+							break; // Filtered everything. No need to evaluate more Bloom-filters.
+						}
+					}
+					}
+				}
+
+				// Compact vectors that have already been loaded
+				for (idx_t i = 0; i < column_ids.size(); i++) {
+					if (filter_info.ColumnHasBloomFilters(i) || filter_info.ColumnHasFilters(i)) {
+						result.data[i].Slice(sel, approved_tuple_count);
+					}
 				}
 			}
 			if (approved_tuple_count == 0) {
-				// all rows were filtered out by the table filters
+				// All rows were filtered out by the table filters. Load more data for this batch.
 				D_ASSERT(has_filters);
 				result.Reset();
 				// skip this vector in all the scans that were not scanned yet
@@ -666,7 +716,7 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 					if (col_idx.IsRowIdColumn()) {
 						continue;
 					}
-					if (has_filters && filter_info.ColumnHasFilters(i)) {
+					if (has_filters && (filter_info.ColumnHasFilters(i) || filter_info.ColumnHasBloomFilters(i))) {
 						continue;
 					}
 					auto &col_data = GetColumn(col_idx);
@@ -675,9 +725,9 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 				state.vector_index++;
 				continue;
 			}
-			//! Now we use the selection vector to fetch data for the other columns.
+			// Now we use the selection vector to fetch data for the other columns.
 			for (idx_t i = 0; i < column_ids.size(); i++) {
-				if (has_filters && filter_info.ColumnHasFilters(i)) {
+				if (has_filters && (filter_info.ColumnHasFilters(i) || filter_info.ColumnHasBloomFilters(i))) {
 					// column has already been scanned as part of the filtering process
 					continue;
 				}
@@ -701,6 +751,7 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 					}
 				}
 			}
+
 			filter_info.EndFilter(filter_state);
 
 			D_ASSERT(approved_tuple_count > 0);
