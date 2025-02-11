@@ -480,3 +480,339 @@ WHERE t.id = ci.movie_id -- join condition
   AND (
     t.production_year BETWEEN 1980 AND 1995
 );
+
+
+-------------
+-- 7b
+-------------
+ALTER TABLE name ADD COLUMN IF NOT EXISTS optimal_parachute_q7b_aka_name BOOLEAN DEFAULT false;
+UPDATE name n
+SET optimal_parachute_q7b_aka_name = true
+FROM aka_name an
+WHERE n.id = an.person_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    an.name LIKE '%a%'
+);
+
+ALTER TABLE person_info ADD COLUMN IF NOT EXISTS optimal_parachute_q7b_aka_name BOOLEAN DEFAULT false;
+UPDATE person_info pi
+SET optimal_parachute_q7b_aka_name = true
+FROM aka_name an
+WHERE pi.person_id = an.person_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    an.name LIKE '%a%'
+);
+
+ALTER TABLE cast_info ADD COLUMN IF NOT EXISTS optimal_parachute_q7b_aka_name BOOLEAN DEFAULT false;
+UPDATE cast_info ci
+SET optimal_parachute_q7b_aka_name = true
+FROM aka_name an
+WHERE an.person_id = ci.person_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    an.name LIKE '%a%'
+);
+
+ALTER TABLE aka_name ADD COLUMN IF NOT EXISTS optimal_parachute_q7b_name BOOLEAN DEFAULT false;
+UPDATE aka_name an
+SET optimal_parachute_q7b_name = true
+FROM name n
+WHERE n.id = an.person_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    n.name_pcode_cf LIKE 'D%'
+    AND n.gender='m'
+);
+
+ALTER TABLE person_info ADD COLUMN IF NOT EXISTS optimal_parachute_q7b_name BOOLEAN DEFAULT false;
+UPDATE person_info pi
+SET optimal_parachute_q7b_name = true
+FROM name n
+WHERE n.id = pi.person_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    n.name_pcode_cf LIKE 'D%'
+    AND n.gender='m'
+);
+
+ALTER TABLE cast_info ADD COLUMN IF NOT EXISTS optimal_parachute_q7b_name BOOLEAN DEFAULT false;
+UPDATE cast_info ci
+SET optimal_parachute_q7b_name = true
+FROM name n
+WHERE ci.person_id = n.id -- join condition
+  -- Predicate from the probe side
+  AND (
+    n.name_pcode_cf LIKE 'D%'
+    AND n.gender='m'
+);
+
+ALTER TABLE movie_link ADD COLUMN IF NOT EXISTS optimal_parachute_q7b_link_type BOOLEAN DEFAULT false;
+UPDATE movie_link ml
+SET optimal_parachute_q7b_link_type = true
+FROM link_type lt
+WHERE lt.id = ml.link_type_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    lt.link ='features'
+);
+
+ALTER TABLE cast_info ADD COLUMN IF NOT EXISTS optimal_parachute_q7b_title BOOLEAN DEFAULT false;
+UPDATE cast_info ci
+SET optimal_parachute_q7b_title = true
+FROM title t
+WHERE t.id = ci.movie_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    t.production_year BETWEEN 1980 AND 1984
+);
+
+ALTER TABLE movie_link ADD COLUMN IF NOT EXISTS optimal_parachute_q7b_title BOOLEAN DEFAULT false;
+UPDATE movie_link ml
+SET optimal_parachute_q7b_title = true
+FROM title t
+WHERE ml.linked_movie_id = t.id -- join condition
+  -- Predicate from the probe side
+  AND (
+    t.production_year BETWEEN 1980 AND 1984
+);
+
+
+-------------
+-- 7c
+-------------
+ALTER TABLE aka_name ADD COLUMN IF NOT EXISTS optimal_parachute_q7c_name BOOLEAN DEFAULT false;
+UPDATE aka_name an
+SET optimal_parachute_q7c_name = true
+FROM name n
+WHERE n.id = an.person_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    n.name_pcode_cf BETWEEN 'A' AND 'F'
+  AND (n.gender='m'
+       OR (n.gender = 'f'
+           AND n.name LIKE 'A%'))
+);
+
+ALTER TABLE person_info ADD COLUMN IF NOT EXISTS optimal_parachute_q7c_name BOOLEAN DEFAULT false;
+UPDATE person_info pi
+SET optimal_parachute_q7c_name = true
+FROM name n
+WHERE n.id = pi.person_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    n.name_pcode_cf BETWEEN 'A' AND 'F'
+  AND (n.gender='m'
+       OR (n.gender = 'f'
+           AND n.name LIKE 'A%'))
+);
+
+ALTER TABLE cast_info ADD COLUMN IF NOT EXISTS optimal_parachute_q7c_name BOOLEAN DEFAULT false;
+UPDATE cast_info ci
+SET optimal_parachute_q7c_name = true
+FROM name n
+WHERE ci.person_id = n.id -- join condition
+  -- Predicate from the probe side
+  AND (
+    n.name_pcode_cf BETWEEN 'A' AND 'F'
+  AND (n.gender='m'
+       OR (n.gender = 'f'
+           AND n.name LIKE 'A%'))
+);
+
+ALTER TABLE name ADD COLUMN IF NOT EXISTS optimal_parachute_q7c_person_info BOOLEAN DEFAULT false;
+UPDATE name n
+SET optimal_parachute_q7c_person_info = true
+FROM person_info pi
+WHERE n.id = pi.person_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    pi.note IS NOT NULL
+);
+
+ALTER TABLE info_type ADD COLUMN IF NOT EXISTS optimal_parachute_q7c_person_info BOOLEAN DEFAULT false;
+UPDATE info_type it
+SET optimal_parachute_q7c_person_info = true
+FROM person_info pi
+WHERE it.id = pi.info_type_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    pi.note IS NOT NULL
+);
+
+ALTER TABLE aka_name ADD COLUMN IF NOT EXISTS optimal_parachute_q7c_person_info BOOLEAN DEFAULT false;
+UPDATE aka_name an
+SET optimal_parachute_q7c_person_info = true
+FROM person_info pi
+WHERE pi.person_id = an.person_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    pi.note IS NOT NULL
+);
+
+ALTER TABLE cast_info ADD COLUMN IF NOT EXISTS optimal_parachute_q7c_person_info BOOLEAN DEFAULT false;
+UPDATE cast_info ci
+SET optimal_parachute_q7c_person_info = true
+FROM person_info pi
+WHERE pi.person_id = ci.person_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    pi.note IS NOT NULL
+);
+
+ALTER TABLE cast_info ADD COLUMN IF NOT EXISTS optimal_parachute_q7c_title BOOLEAN DEFAULT false;
+UPDATE cast_info ci
+SET optimal_parachute_q7c_title = true
+FROM title t
+WHERE t.id = ci.movie_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    t.production_year BETWEEN 1980 AND 2010
+);
+
+ALTER TABLE movie_link ADD COLUMN IF NOT EXISTS optimal_parachute_q7c_title BOOLEAN DEFAULT false;
+UPDATE movie_link ml
+SET optimal_parachute_q7c_title = true
+FROM title t
+WHERE ml.linked_movie_id = t.id -- join condition
+  -- Predicate from the probe side
+  AND (
+    t.production_year BETWEEN 1980 AND 2010
+);
+
+
+-------------
+-- 8a
+-------------
+ALTER TABLE title ADD COLUMN IF NOT EXISTS optimal_parachute_q8a_movie_companies BOOLEAN DEFAULT false;
+UPDATE title t
+SET optimal_parachute_q8a_movie_companies = true
+FROM movie_companies mc
+WHERE t.id = mc.movie_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    mc.note like '%(Japan)%'
+    AND mc.note not like '%(USA)%'
+);
+
+ALTER TABLE company_name ADD COLUMN IF NOT EXISTS optimal_parachute_q8a_movie_companies BOOLEAN DEFAULT false;
+UPDATE company_name cn
+SET optimal_parachute_q8a_movie_companies = true
+FROM movie_companies mc
+WHERE mc.company_id = cn.id -- join condition
+  -- Predicate from the probe side
+  AND (
+    mc.note like '%(Japan)%'
+    AND mc.note not like '%(USA)%'
+);
+
+ALTER TABLE cast_info ADD COLUMN IF NOT EXISTS optimal_parachute_q8a_movie_companies BOOLEAN DEFAULT false;
+UPDATE cast_info ci
+SET optimal_parachute_q8a_movie_companies = true
+FROM movie_companies mc
+WHERE ci.movie_id = mc.movie_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    mc.note like '%(Japan)%'
+    AND mc.note not like '%(USA)%'
+);
+
+ALTER TABLE movie_companies ADD COLUMN IF NOT EXISTS optimal_parachute_q8a_company_name BOOLEAN DEFAULT false;
+UPDATE movie_companies mc
+SET optimal_parachute_q8a_company_name = true
+FROM company_name cn
+WHERE mc.company_id = cn.id -- join condition
+  -- Predicate from the probe side
+  AND (
+    cn.country_code ='[jp]'
+);
+
+ALTER TABLE aka_name ADD COLUMN IF NOT EXISTS optimal_parachute_q8a_name BOOLEAN DEFAULT false;
+UPDATE aka_name an1
+SET optimal_parachute_q8a_name = true
+FROM name n1
+WHERE an1.person_id = n1.id -- join condition
+  -- Predicate from the probe side
+  AND (
+    n1.name like '%Yo%'
+    AND n1.name not like '%Yu%'
+);
+
+ALTER TABLE cast_info ADD COLUMN IF NOT EXISTS optimal_parachute_q8a_name BOOLEAN DEFAULT false;
+UPDATE cast_info ci
+SET optimal_parachute_q8a_name = true
+FROM name n1
+WHERE n1.id = ci.person_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    n1.name like '%Yo%'
+    AND n1.name not like '%Yu%'
+);
+
+
+-------------
+-- 8b
+-------------
+ALTER TABLE cast_info ADD COLUMN IF NOT EXISTS optimal_parachute_q8b_title BOOLEAN DEFAULT false;
+UPDATE cast_info ci
+SET optimal_parachute_q8b_title = true
+FROM title t
+WHERE ci.movie_id = t.id -- join condition
+  -- Predicate from the probe side
+  AND (
+    t.production_year BETWEEN 2006 AND 2007
+    AND (t.title like 'One Piece%'
+       OR t.title like 'Dragon Ball Z%')
+);
+
+ALTER TABLE movie_companies ADD COLUMN IF NOT EXISTS optimal_parachute_q8b_title BOOLEAN DEFAULT false;
+UPDATE movie_companies mc
+SET optimal_parachute_q8b_title = true
+FROM title t
+WHERE t.id = mc.movie_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    t.production_year BETWEEN 2006 AND 2007
+    AND (t.title like 'One Piece%'
+       OR t.title like 'Dragon Ball Z%')
+);
+
+ALTER TABLE title ADD COLUMN IF NOT EXISTS optimal_parachute_q8b_movie_companies BOOLEAN DEFAULT false;
+UPDATE title t
+SET optimal_parachute_q8b_movie_companies = true
+FROM movie_companies mc
+WHERE t.id = mc.movie_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    mc.note like '%(Japan)%'
+    AND mc.note not like '%(USA)%'
+    AND (mc.note like '%(2006)%'
+       OR mc.note like '%(2007)%')
+);
+
+ALTER TABLE company_name ADD COLUMN IF NOT EXISTS optimal_parachute_q8b_movie_companies BOOLEAN DEFAULT false;
+UPDATE company_name cn
+SET optimal_parachute_q8b_movie_companies = true
+FROM movie_companies mc
+WHERE mc.company_id = cn.id -- join condition
+  -- Predicate from the probe side
+  AND (
+    mc.note like '%(Japan)%'
+    AND mc.note not like '%(USA)%'
+    AND (mc.note like '%(2006)%'
+       OR mc.note like '%(2007)%')
+);
+
+ALTER TABLE cast_info ADD COLUMN IF NOT EXISTS optimal_parachute_q8b_movie_companies BOOLEAN DEFAULT false;
+UPDATE cast_info ci
+SET optimal_parachute_q8b_movie_companies = true
+FROM movie_companies mc
+WHERE mc.company_id = cn.id -- join condition
+  -- Predicate from the probe side
+  AND (
+    mc.note like '%(Japan)%'
+    AND mc.note not like '%(USA)%'
+    AND (mc.note like '%(2006)%'
+       OR mc.note like '%(2007)%')
+);
