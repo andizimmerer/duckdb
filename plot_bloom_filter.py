@@ -1,5 +1,6 @@
 import re
 import json
+import math
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -92,7 +93,7 @@ def drop_columns(df):
 # Create the stacked bar plot
 def plot_stacked_medians(aligned_medians, save_path=None):
     # Extract query IDs from the 'name' column
-    query_ids = extract_query_ids(aligned_medians)
+    query_ids = aligned_medians['name'].str.extract(r'(.*)')[0]
     aligned_medians.index = query_ids  # Update index with query IDs
 
     # Make sure the aligned medians and query_ids have the same length
@@ -193,8 +194,8 @@ def plot_build_side_distinct_values_histogram(df, save_path=None):
 
 
 # Main script
-file_with_bloom = "imdb_with_bloom.log"
-file_without_bloom = "imdb_without_bloom.log"
+file_with_bloom = "parachute.log"
+file_without_bloom = "imdb_with_bloom.log"
 
 # Load data from JSON files
 df_with_bloom = load_json_data(file_with_bloom)
@@ -222,6 +223,9 @@ medians_without_bloom = calculate_medians(df_without_bloom, query_column='name',
 
 medians_with_bloom = drop_columns(medians_with_bloom)
 medians_without_bloom = drop_columns(medians_without_bloom)
+
+medians_with_bloom["name"] = extract_query_ids(medians_with_bloom)
+medians_without_bloom["name"] = extract_query_ids(medians_without_bloom)
 
 aligned_medians = align_medians(medians_with_bloom, medians_without_bloom)
 

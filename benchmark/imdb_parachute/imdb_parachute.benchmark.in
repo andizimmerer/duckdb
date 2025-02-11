@@ -1,0 +1,22 @@
+# name: ${FILE_PATH}
+# description: ${DESCRIPTION}
+# group: [imdb]
+
+name Q${QUERY_NUMBER_PADDED}
+group imdb
+
+require httpfs
+
+require parquet
+
+cache imdb_parachute.duckdb
+
+load benchmark/imdb_parachute/init/parachute_setup.sql
+
+init
+set threads=1;
+set hash_join_bloom_filter=true;
+
+run benchmark/imdb_parachute/queries/${QUERY_NUMBER_PADDED}.sql
+
+result benchmark/imdb/answers/${QUERY_NUMBER_PADDED}.csv

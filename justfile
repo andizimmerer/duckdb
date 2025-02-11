@@ -9,6 +9,9 @@ benchmarknobloom: build-release
     sed -i -e 's/.*hash_join_bloom_filter.*/set hash_join_bloom_filter=false;/' benchmark/imdb/imdb.benchmark.in
     build/release/benchmark/benchmark_runner "benchmark/imdb/.*" 1> imdb_without_bloom.log
 
+parachute: build-release
+    build/release/benchmark/benchmark_runner "benchmark/imdb_parachute/.*" 1> parachute.log
+
 plot:
     conda init
     conda activate duckdb
