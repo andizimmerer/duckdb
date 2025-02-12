@@ -195,7 +195,7 @@ def plot_build_side_distinct_values_histogram(df, save_path=None):
 
 # Main script
 file_with_bloom = "parachute.log"
-file_without_bloom = "imdb_with_bloom.log"
+file_without_bloom = "imdb_without_bloom.log"
 
 # Load data from JSON files
 df_with_bloom = load_json_data(file_with_bloom)

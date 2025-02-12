@@ -808,11 +808,433 @@ ALTER TABLE cast_info ADD COLUMN IF NOT EXISTS optimal_parachute_q8b_movie_compa
 UPDATE cast_info ci
 SET optimal_parachute_q8b_movie_companies = true
 FROM movie_companies mc
-WHERE mc.company_id = cn.id -- join condition
+WHERE ci.movie_id = mc.movie_id -- join condition
   -- Predicate from the probe side
   AND (
     mc.note like '%(Japan)%'
     AND mc.note not like '%(USA)%'
     AND (mc.note like '%(2006)%'
        OR mc.note like '%(2007)%')
+);
+
+
+-------------
+-- 9a
+-------------
+ALTER TABLE movie_companies ADD COLUMN IF NOT EXISTS optimal_parachute_q9a_title BOOLEAN DEFAULT false;
+UPDATE movie_companies mc
+SET optimal_parachute_q9a_title = true
+FROM title t
+WHERE t.id = mc.movie_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    t.production_year BETWEEN 2005 AND 2015
+);
+
+ALTER TABLE cast_info ADD COLUMN IF NOT EXISTS optimal_parachute_q9a_title BOOLEAN DEFAULT false;
+UPDATE cast_info ci
+SET optimal_parachute_q9a_title = true
+FROM title t
+WHERE ci.movie_id = t.id -- join condition
+  -- Predicate from the probe side
+  AND (
+    t.production_year BETWEEN 2005 AND 2015
+);
+
+ALTER TABLE title ADD COLUMN IF NOT EXISTS optimal_parachute_q9a_cast_info BOOLEAN DEFAULT false;
+UPDATE title t
+SET optimal_parachute_q9a_cast_info = true
+FROM cast_info ci
+WHERE ci.movie_id = t.id -- join condition
+  -- Predicate from the probe side
+  AND (
+    ci.note in ('(voice)',
+                  '(voice: Japanese version)',
+                  '(voice) (uncredited)',
+                  '(voice: English version)')
+);
+
+ALTER TABLE movie_companies ADD COLUMN IF NOT EXISTS optimal_parachute_q9a_cast_info BOOLEAN DEFAULT false;
+UPDATE movie_companies mc
+SET optimal_parachute_q9a_cast_info = true
+FROM cast_info ci
+WHERE ci.movie_id = mc.movie_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    ci.note in ('(voice)',
+                  '(voice: Japanese version)',
+                  '(voice) (uncredited)',
+                  '(voice: English version)')
+);
+
+ALTER TABLE role_type ADD COLUMN IF NOT EXISTS optimal_parachute_q9a_cast_info BOOLEAN DEFAULT false;
+UPDATE role_type rt
+SET optimal_parachute_q9a_cast_info = true
+FROM cast_info ci
+WHERE ci.role_id = rt.id -- join condition
+  -- Predicate from the probe side
+  AND (
+    ci.note in ('(voice)',
+                  '(voice: Japanese version)',
+                  '(voice) (uncredited)',
+                  '(voice: English version)')
+);
+
+ALTER TABLE name ADD COLUMN IF NOT EXISTS optimal_parachute_q9a_cast_info BOOLEAN DEFAULT false;
+UPDATE name n
+SET optimal_parachute_q9a_cast_info = true
+FROM cast_info ci
+WHERE n.id = ci.person_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    ci.note in ('(voice)',
+                  '(voice: Japanese version)',
+                  '(voice) (uncredited)',
+                  '(voice: English version)')
+);
+
+ALTER TABLE char_name ADD COLUMN IF NOT EXISTS optimal_parachute_q9a_cast_info BOOLEAN DEFAULT false;
+UPDATE char_name chn
+SET optimal_parachute_q9a_cast_info = true
+FROM cast_info ci
+WHERE chn.id = ci.person_role_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    ci.note in ('(voice)',
+                  '(voice: Japanese version)',
+                  '(voice) (uncredited)',
+                  '(voice: English version)')
+);
+
+ALTER TABLE aka_name ADD COLUMN IF NOT EXISTS optimal_parachute_q9a_cast_info BOOLEAN DEFAULT false;
+UPDATE aka_name an
+SET optimal_parachute_q9a_cast_info = true
+FROM cast_info ci
+WHERE an.person_id = ci.person_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    ci.note in ('(voice)',
+                  '(voice: Japanese version)',
+                  '(voice) (uncredited)',
+                  '(voice: English version)')
+);
+
+ALTER TABLE cast_info ADD COLUMN IF NOT EXISTS optimal_parachute_q9a_name BOOLEAN DEFAULT false;
+UPDATE cast_info ci
+SET optimal_parachute_q9a_name = true
+FROM name n
+WHERE n.id = ci.person_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    n.gender ='f'
+    AND n.name like '%Ang%'
+);
+
+ALTER TABLE aka_name ADD COLUMN IF NOT EXISTS optimal_parachute_q9a_name BOOLEAN DEFAULT false;
+UPDATE aka_name an
+SET optimal_parachute_q9a_name = true
+FROM name n
+WHERE an.person_id = n.id -- join condition
+  -- Predicate from the probe side
+  AND (
+    n.gender ='f'
+    AND n.name like '%Ang%'
+);
+
+
+-------------
+-- 9b
+-------------
+ALTER TABLE cast_info ADD COLUMN IF NOT EXISTS optimal_parachute_q9b_name BOOLEAN DEFAULT false;
+UPDATE cast_info ci
+SET optimal_parachute_q9b_name = true
+FROM name n
+WHERE n.id = ci.person_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    n.gender ='f'
+    AND n.name like '%Angel%'
+);
+
+ALTER TABLE aka_name ADD COLUMN IF NOT EXISTS optimal_parachute_q9b_name BOOLEAN DEFAULT false;
+UPDATE aka_name an
+SET optimal_parachute_q9b_name = true
+FROM name n
+WHERE an.person_id = n.id -- join condition
+  -- Predicate from the probe side
+  AND (
+    n.gender ='f'
+    AND n.name like '%Angel%'
+);
+
+ALTER TABLE title ADD COLUMN IF NOT EXISTS optimal_parachute_q9b_movie_companies BOOLEAN DEFAULT false;
+UPDATE title t
+SET optimal_parachute_q9b_movie_companies = true
+FROM movie_companies mc
+WHERE t.id = mc.movie_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    mc.note like '%(200%)%'
+    AND (mc.note like '%(USA)%'
+       OR mc.note like '%(worldwide)%')
+);
+
+ALTER TABLE cast_info ADD COLUMN IF NOT EXISTS optimal_parachute_q9b_movie_companies BOOLEAN DEFAULT false;
+UPDATE cast_info ci
+SET optimal_parachute_q9b_movie_companies = true
+FROM movie_companies mc
+WHERE ci.movie_id = mc.movie_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    mc.note like '%(200%)%'
+    AND (mc.note like '%(USA)%'
+       OR mc.note like '%(worldwide)%')
+);
+
+ALTER TABLE company_name ADD COLUMN IF NOT EXISTS optimal_parachute_q9b_movie_companies BOOLEAN DEFAULT false;
+UPDATE company_name cn
+SET optimal_parachute_q9b_movie_companies = true
+FROM movie_companies mc
+WHERE mc.company_id = cn.id -- join condition
+  -- Predicate from the probe side
+  AND (
+    mc.note like '%(200%)%'
+    AND (mc.note like '%(USA)%'
+       OR mc.note like '%(worldwide)%')
+);
+
+ALTER TABLE movie_companies ADD COLUMN IF NOT EXISTS optimal_parachute_q9b_company_name BOOLEAN DEFAULT false;
+UPDATE movie_companies mc
+SET optimal_parachute_q9b_company_name = true
+FROM company_name cn
+WHERE mc.company_id = cn.id -- join condition
+  -- Predicate from the probe side
+  AND (
+    cn.country_code ='[us]'
+);
+
+ALTER TABLE movie_companies ADD COLUMN IF NOT EXISTS optimal_parachute_q9b_title BOOLEAN DEFAULT false;
+UPDATE movie_companies mc
+SET optimal_parachute_q9b_title = true
+FROM title t
+WHERE t.id = mc.movie_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    t.production_year BETWEEN 2007 AND 2010
+);
+
+ALTER TABLE cast_info ADD COLUMN IF NOT EXISTS optimal_parachute_q9b_title BOOLEAN DEFAULT false;
+UPDATE cast_info ci
+SET optimal_parachute_q9b_title = true
+FROM title t
+WHERE ci.movie_id = t.id -- join condition
+  -- Predicate from the probe side
+  AND (
+    t.production_year BETWEEN 2007 AND 2010
+);
+
+
+-------------
+-- 9c
+-------------
+ALTER TABLE title ADD COLUMN IF NOT EXISTS optimal_parachute_q9c_cast_info BOOLEAN DEFAULT false;
+UPDATE title t
+SET optimal_parachute_q9c_cast_info = true
+FROM cast_info ci
+WHERE ci.movie_id = t.id -- join condition
+  -- Predicate from the probe side
+  AND (
+    ci.note in ('(voice)',
+                  '(voice: Japanese version)',
+                  '(voice) (uncredited)',
+                  '(voice: English version)')
+);
+
+ALTER TABLE movie_companies ADD COLUMN IF NOT EXISTS optimal_parachute_q9c_cast_info BOOLEAN DEFAULT false;
+UPDATE movie_companies mc
+SET optimal_parachute_q9c_cast_info = true
+FROM cast_info ci
+WHERE ci.movie_id = mc.movie_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    ci.note in ('(voice)',
+                  '(voice: Japanese version)',
+                  '(voice) (uncredited)',
+                  '(voice: English version)')
+);
+
+ALTER TABLE role_type ADD COLUMN IF NOT EXISTS optimal_parachute_q9c_cast_info BOOLEAN DEFAULT false;
+UPDATE role_type rt
+SET optimal_parachute_q9c_cast_info = true
+FROM cast_info ci
+WHERE ci.role_id = rt.id -- join condition
+  -- Predicate from the probe side
+  AND (
+    ci.note in ('(voice)',
+                  '(voice: Japanese version)',
+                  '(voice) (uncredited)',
+                  '(voice: English version)')
+);
+
+ALTER TABLE name ADD COLUMN IF NOT EXISTS optimal_parachute_q9c_cast_info BOOLEAN DEFAULT false;
+UPDATE name n
+SET optimal_parachute_q9c_cast_info = true
+FROM cast_info ci
+WHERE n.id = ci.person_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    ci.note in ('(voice)',
+                  '(voice: Japanese version)',
+                  '(voice) (uncredited)',
+                  '(voice: English version)')
+);
+
+ALTER TABLE char_name ADD COLUMN IF NOT EXISTS optimal_parachute_q9c_cast_info BOOLEAN DEFAULT false;
+UPDATE char_name chn
+SET optimal_parachute_q9c_cast_info = true
+FROM cast_info ci
+WHERE chn.id = ci.person_role_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    ci.note in ('(voice)',
+                  '(voice: Japanese version)',
+                  '(voice) (uncredited)',
+                  '(voice: English version)')
+);
+
+ALTER TABLE aka_name ADD COLUMN IF NOT EXISTS optimal_parachute_q9c_cast_info BOOLEAN DEFAULT false;
+UPDATE aka_name an
+SET optimal_parachute_q9c_cast_info = true
+FROM cast_info ci
+WHERE an.person_id = ci.person_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    ci.note in ('(voice)',
+                  '(voice: Japanese version)',
+                  '(voice) (uncredited)',
+                  '(voice: English version)')
+);
+
+ALTER TABLE cast_info ADD COLUMN IF NOT EXISTS optimal_parachute_q9c_name BOOLEAN DEFAULT false;
+UPDATE cast_info ci
+SET optimal_parachute_q9c_name = true
+FROM name n
+WHERE n.id = ci.person_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    n.gender ='f'
+    AND n.name like '%An%'
+);
+
+ALTER TABLE aka_name ADD COLUMN IF NOT EXISTS optimal_parachute_q9c_name BOOLEAN DEFAULT false;
+UPDATE aka_name an
+SET optimal_parachute_q9c_name = true
+FROM name n
+WHERE an.person_id = n.id -- join condition
+  -- Predicate from the probe side
+  AND (
+    n.gender ='f'
+    AND n.name like '%An%'
+);
+
+
+-------------
+-- 9d
+-------------
+ALTER TABLE title ADD COLUMN IF NOT EXISTS optimal_parachute_q9d_cast_info BOOLEAN DEFAULT false;
+UPDATE title t
+SET optimal_parachute_q9d_cast_info = true
+FROM cast_info ci
+WHERE ci.movie_id = t.id -- join condition
+  -- Predicate from the probe side
+  AND (
+    ci.note in ('(voice)',
+                  '(voice: Japanese version)',
+                  '(voice) (uncredited)',
+                  '(voice: English version)')
+);
+
+ALTER TABLE movie_companies ADD COLUMN IF NOT EXISTS optimal_parachute_q9d_cast_info BOOLEAN DEFAULT false;
+UPDATE movie_companies mc
+SET optimal_parachute_q9d_cast_info = true
+FROM cast_info ci
+WHERE ci.movie_id = mc.movie_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    ci.note in ('(voice)',
+                  '(voice: Japanese version)',
+                  '(voice) (uncredited)',
+                  '(voice: English version)')
+);
+
+ALTER TABLE role_type ADD COLUMN IF NOT EXISTS optimal_parachute_q9d_cast_info BOOLEAN DEFAULT false;
+UPDATE role_type rt
+SET optimal_parachute_q9d_cast_info = true
+FROM cast_info ci
+WHERE ci.role_id = rt.id -- join condition
+  -- Predicate from the probe side
+  AND (
+    ci.note in ('(voice)',
+                  '(voice: Japanese version)',
+                  '(voice) (uncredited)',
+                  '(voice: English version)')
+);
+
+ALTER TABLE name ADD COLUMN IF NOT EXISTS optimal_parachute_q9d_cast_info BOOLEAN DEFAULT false;
+UPDATE name n
+SET optimal_parachute_q9d_cast_info = true
+FROM cast_info ci
+WHERE n.id = ci.person_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    ci.note in ('(voice)',
+                  '(voice: Japanese version)',
+                  '(voice) (uncredited)',
+                  '(voice: English version)')
+);
+
+ALTER TABLE char_name ADD COLUMN IF NOT EXISTS optimal_parachute_q9d_cast_info BOOLEAN DEFAULT false;
+UPDATE char_name chn
+SET optimal_parachute_q9d_cast_info = true
+FROM cast_info ci
+WHERE chn.id = ci.person_role_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    ci.note in ('(voice)',
+                  '(voice: Japanese version)',
+                  '(voice) (uncredited)',
+                  '(voice: English version)')
+);
+
+ALTER TABLE aka_name ADD COLUMN IF NOT EXISTS optimal_parachute_q9d_cast_info BOOLEAN DEFAULT false;
+UPDATE aka_name an
+SET optimal_parachute_q9d_cast_info = true
+FROM cast_info ci
+WHERE an.person_id = ci.person_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    ci.note in ('(voice)',
+                  '(voice: Japanese version)',
+                  '(voice) (uncredited)',
+                  '(voice: English version)')
+);
+
+ALTER TABLE cast_info ADD COLUMN IF NOT EXISTS optimal_parachute_q9d_name BOOLEAN DEFAULT false;
+UPDATE cast_info ci
+SET optimal_parachute_q9d_name = true
+FROM name n
+WHERE n.id = ci.person_id -- join condition
+  -- Predicate from the probe side
+  AND (
+    n.gender ='f'
+);
+
+ALTER TABLE aka_name ADD COLUMN IF NOT EXISTS optimal_parachute_q9d_name BOOLEAN DEFAULT false;
+UPDATE aka_name an
+SET optimal_parachute_q9d_name = true
+FROM name n
+WHERE an.person_id = n.id -- join condition
+  -- Predicate from the probe side
+  AND (
+    n.gender ='f'
 );

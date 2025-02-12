@@ -15,7 +15,7 @@ load benchmark/imdb_parachute/init/parachute_setup.sql
 
 init
 set threads=1;
-set hash_join_bloom_filter=true;
+set hash_join_bloom_filter=false;
 
 run benchmark/imdb_parachute/queries/${QUERY_NUMBER_PADDED}.sql
 
