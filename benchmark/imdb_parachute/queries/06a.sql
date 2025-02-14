@@ -1,6 +1,6 @@
-SELECT min(k.keyword) AS movie_keyword,
-       min(n.name) AS actor_name,
-       min(t.title) AS marvel_movie
+SELECT MIN(k.keyword) AS movie_keyword,
+       MIN(n.name) AS actor_name,
+       MIN(t.title) AS marvel_movie
 FROM cast_info AS ci,
      keyword AS k,
      movie_keyword AS mk,
@@ -14,5 +14,6 @@ WHERE k.keyword = 'marvel-cinematic-universe'
   AND t.id = ci.movie_id
   AND ci.movie_id = mk.movie_id
   AND n.id = ci.person_id
-  -- parachute columns
-  AND ci.optimal_parachute_q6a_name = true;
+-- parachute columns
+  AND ci.optimal_parachute_q06a_name = true
+;

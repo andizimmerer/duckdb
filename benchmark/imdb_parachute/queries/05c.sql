@@ -1,12 +1,12 @@
-SELECT min(t.title) AS american_movie
+SELECT MIN(t.title) AS american_movie
 FROM company_type AS ct,
      info_type AS it,
      movie_companies AS mc,
      movie_info AS mi,
      title AS t
 WHERE ct.kind = 'production companies'
-  AND mc.note not like '%(TV)%'
-  AND mc.note like '%(USA)%'
+  AND mc.note NOT LIKE '%(TV)%'
+  AND mc.note LIKE '%(USA)%'
   AND mi.info IN ('Sweden',
                   'Norway',
                   'Germany',
@@ -23,7 +23,7 @@ WHERE ct.kind = 'production companies'
   AND mc.movie_id = mi.movie_id
   AND ct.id = mc.company_type_id
   AND it.id = mi.info_type_id
-  -- parachute columns
-  AND mi.optimal_parachute_q5c_title = true
-  AND mc.optimal_parachute_q5c_title = true
-  AND mc.optimal_parachute_q5c_movie_info = true;
+-- parachute columns
+  AND mi.optimal_parachute_q05c_title = true
+  AND mc.optimal_parachute_q05c_title = true
+;

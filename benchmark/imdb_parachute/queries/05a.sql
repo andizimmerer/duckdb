@@ -1,12 +1,12 @@
-SELECT min(t.title) AS typical_european_movie
+SELECT MIN(t.title) AS typical_european_movie
 FROM company_type AS ct,
      info_type AS it,
      movie_companies AS mc,
      movie_info AS mi,
      title AS t
 WHERE ct.kind = 'production companies'
-  AND mc.note like '%(theatrical)%'
-  AND mc.note like '%(France)%'
+  AND mc.note LIKE '%(theatrical)%'
+  AND mc.note LIKE '%(France)%'
   AND mi.info IN ('Sweden',
                   'Norway',
                   'Germany',
@@ -21,6 +21,7 @@ WHERE ct.kind = 'production companies'
   AND mc.movie_id = mi.movie_id
   AND ct.id = mc.company_type_id
   AND it.id = mi.info_type_id
-  -- parachute columns
-  AND mc.optimal_parachute_q5a_title = true
-  AND mi.optimal_parachute_q5a_title = true;
+-- parachute columns
+  AND mi.optimal_parachute_q05a_title = true
+  AND mc.optimal_parachute_q05a_title = true
+;

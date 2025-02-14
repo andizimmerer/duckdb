@@ -1,7 +1,7 @@
-SELECT min(an.name) AS alternative_name,
-       min(chn.name) AS voiced_char_name,
-       min(n.name) AS voicing_actress,
-       min(t.title) AS american_movie
+SELECT MIN(an.name) AS alternative_name,
+       MIN(chn.name) AS voiced_char_name,
+       MIN(n.name) AS voicing_actress,
+       MIN(t.title) AS american_movie
 FROM aka_name AS an,
      char_name AS chn,
      cast_info AS ci,
@@ -10,7 +10,7 @@ FROM aka_name AS an,
      name AS n,
      role_type AS rt,
      title AS t
-WHERE ci.note in ('(voice)',
+WHERE ci.note IN ('(voice)',
                   '(voice: Japanese version)',
                   '(voice) (uncredited)',
                   '(voice: English version)')
@@ -26,13 +26,7 @@ WHERE ci.note in ('(voice)',
   AND chn.id = ci.person_role_id
   AND an.person_id = n.id
   AND an.person_id = ci.person_id
-  -- parachute columns
-  AND t.optimal_parachute_q9d_cast_info = true
-  AND mc.optimal_parachute_q9d_cast_info = true
-  AND rt.optimal_parachute_q9d_cast_info = true
-  AND n.optimal_parachute_q9d_cast_info = true
-  AND chn.optimal_parachute_q9d_cast_info = true
-  AND an.optimal_parachute_q9d_cast_info = true
-  AND ci.optimal_parachute_q9d_name = true
-  AND an.optimal_parachute_q9d_name = true
+-- parachute columns
+  AND ci.optimal_parachute_q09d_name = true
+  AND an.optimal_parachute_q09d_name = true
 ;

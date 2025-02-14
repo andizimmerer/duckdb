@@ -1,4 +1,4 @@
-SELECT min(t.title) AS movie_title
+SELECT MIN(t.title) AS movie_title
 FROM company_name AS cn,
      keyword AS k,
      movie_companies AS mc,
@@ -11,5 +11,6 @@ WHERE cn.country_code ='[sm]'
   AND t.id = mk.movie_id
   AND mk.keyword_id = k.id
   AND mc.movie_id = mk.movie_id
-  -- parachute columns
-  AND mc.optimal_parachute_q2c_company_name = true;
+-- parachute columns
+  AND mc.optimal_parachute_q02c_company_name = true
+;

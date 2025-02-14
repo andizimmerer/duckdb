@@ -1,12 +1,12 @@
-SELECT min(mi_idx.info) AS rating,
-       min(t.title) AS movie_title
+SELECT MIN(mi_idx.info) AS rating,
+       MIN(t.title) AS movie_title
 FROM info_type AS it,
      keyword AS k,
      movie_info_idx AS mi_idx,
      movie_keyword AS mk,
      title AS t
 WHERE it.info ='rating'
-  AND k.keyword like '%sequel%'
+  AND k.keyword LIKE '%sequel%'
   AND mi_idx.info > '5.0'
   AND t.production_year > 2005
   AND t.id = mi_idx.movie_id
@@ -14,7 +14,8 @@ WHERE it.info ='rating'
   AND mk.movie_id = mi_idx.movie_id
   AND k.id = mk.keyword_id
   AND it.id = mi_idx.info_type_id
-  -- parachute columns
-  AND mk.optimal_parachute_q4a_keyword = true
-  AND mk.optimal_parachute_q4a_title = true
-  AND mi_idx.optimal_parachute_q4a_title = true;
+-- parachute columns
+  AND mi_idx.optimal_parachute_q04a_title = true
+  AND mk.optimal_parachute_q04a_title = true
+  AND mk.optimal_parachute_q04a_keyword = true
+;

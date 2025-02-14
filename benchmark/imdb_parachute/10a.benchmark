@@ -1,0 +1,7 @@
+# name: benchmark/imdb_parachute/10a.benchmark
+# description: Run query 10a from the imdb benchmark (single-threaded)
+# group: [imdb]
+
+template benchmark/imdb_parachute/imdb_parachute.benchmark.in
+QUERY_NUMBER=10a
+QUERY_NUMBER_PADDED=10a

@@ -1,5 +1,5 @@
-SELECT min(n.name) AS of_person,
-       min(t.title) AS biography_movie
+SELECT MIN(n.name) AS of_person,
+       MIN(t.title) AS biography_movie
 FROM aka_name AS an,
      cast_info AS ci,
      info_type AS it,
@@ -28,9 +28,9 @@ WHERE an.name LIKE '%a%'
   AND pi.person_id = ci.person_id
   AND an.person_id = ci.person_id
   AND ci.movie_id = ml.linked_movie_id
-  -- parachute columns
-  AND an.optimal_parachute_q7a_name = true
-  AND pi.optimal_parachute_q7a_name = true
-  AND ml.optimal_parachute_q7a_link_type = true
-  AND ml.optimal_parachute_q7a_title = true
-  AND ci.optimal_parachute_q7a_title = true;
+-- parachute columns
+  AND an.optimal_parachute_q07a_name = true
+  AND pi.optimal_parachute_q07a_name = true
+  AND ci.optimal_parachute_q07a_name = true
+  AND ml.optimal_parachute_q07a_link_type = true
+;

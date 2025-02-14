@@ -1,0 +1,7 @@
+# name: benchmark/imdb_parachute/27c.benchmark
+# description: Run query 27c from the imdb benchmark (single-threaded)
+# group: [imdb]
+
+template benchmark/imdb_parachute/imdb_parachute.benchmark.in
+QUERY_NUMBER=27c
+QUERY_NUMBER_PADDED=27c

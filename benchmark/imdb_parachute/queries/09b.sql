@@ -1,7 +1,7 @@
-SELECT min(an.name) AS alternative_name,
-       min(chn.name) AS voiced_character,
-       min(n.name) AS voicing_actress,
-       min(t.title) AS american_movie
+SELECT MIN(an.name) AS alternative_name,
+       MIN(chn.name) AS voiced_character,
+       MIN(n.name) AS voicing_actress,
+       MIN(t.title) AS american_movie
 FROM aka_name AS an,
      char_name AS chn,
      cast_info AS ci,
@@ -12,11 +12,11 @@ FROM aka_name AS an,
      title AS t
 WHERE ci.note = '(voice)'
   AND cn.country_code ='[us]'
-  AND mc.note like '%(200%)%'
-  AND (mc.note like '%(USA)%'
-       OR mc.note like '%(worldwide)%')
+  AND mc.note LIKE '%(200%)%'
+  AND (mc.note LIKE '%(USA)%'
+       OR mc.note LIKE '%(worldwide)%')
   AND n.gender ='f'
-  AND n.name like '%Angel%'
+  AND n.name LIKE '%Angel%'
   AND rt.role ='actress'
   AND t.production_year BETWEEN 2007 AND 2010
   AND ci.movie_id = t.id
@@ -28,13 +28,11 @@ WHERE ci.note = '(voice)'
   AND chn.id = ci.person_role_id
   AND an.person_id = n.id
   AND an.person_id = ci.person_id
-  -- parachute columns
-  AND an.optimal_parachute_q9b_name = true
-  AND ci.optimal_parachute_q9b_name = true
-  AND t.optimal_parachute_q9b_movie_companies = true
-  AND ci.optimal_parachute_q9b_movie_companies = true
-  AND cn.optimal_parachute_q9b_movie_companies = true
-  AND mc.optimal_parachute_q9b_company_name = true
-  AND ci.optimal_parachute_q9b_title = true
-  AND mc.optimal_parachute_q9b_title = true
+-- parachute columns
+  AND ci.optimal_parachute_q09b_name = true
+  AND an.optimal_parachute_q09b_name = true
+  AND t.optimal_parachute_q09b_movie_companies = true
+  AND ci.optimal_parachute_q09b_movie_companies = true
+  AND cn.optimal_parachute_q09b_movie_companies = true
+  AND mc.optimal_parachute_q09b_company_name = true
 ;

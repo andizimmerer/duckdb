@@ -1,9 +1,9 @@
-SELECT min(t.title) AS movie_title
+SELECT MIN(t.title) AS movie_title
 FROM keyword AS k,
      movie_info AS mi,
      movie_keyword AS mk,
      title AS t
-WHERE k.keyword like '%sequel%'
+WHERE k.keyword LIKE '%sequel%'
   AND mi.info IN ('Sweden',
                   'Norway',
                   'Germany',
@@ -19,7 +19,5 @@ WHERE k.keyword like '%sequel%'
   AND t.id = mk.movie_id
   AND mk.movie_id = mi.movie_id
   AND k.id = mk.keyword_id
-  -- parachute columns
-  AND mk.optimal_parachute_q3c_keyword = true
-  AND mk.optimal_parachute_q3c_movie_info = true
-  AND t.optimal_parachute_q3c_movie_info = true;
+-- parachute columns
+;
