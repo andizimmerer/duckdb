@@ -194,7 +194,7 @@ def plot_build_side_distinct_values_histogram(df, save_path=None):
 
 
 # Main script
-file_with_bloom = "parachute.log"
+file_with_bloom = "imdb_with_bloom.log"
 file_without_bloom = "imdb_without_bloom.log"
 
 # Load data from JSON files
@@ -231,4 +231,4 @@ aligned_medians = align_medians(medians_with_bloom, medians_without_bloom)
 
 
 # Save the plot as SVG and display it
-plot_stacked_medians(aligned_medians, save_path='query_execution_times.svg')
+plot_stacked_medians(aligned_medians, save_path='sip.svg')
