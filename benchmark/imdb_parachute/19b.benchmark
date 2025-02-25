@@ -1,0 +1,7 @@
+# name: benchmark/imdb_parachute/19b.benchmark
+# description: Run query 19b from the imdb benchmark (single-threaded)
+# group: [imdb]
+
+template benchmark/imdb_parachute/imdb_parachute.benchmark.in
+QUERY_NUMBER=19b
+QUERY_NUMBER_PADDED=19b
