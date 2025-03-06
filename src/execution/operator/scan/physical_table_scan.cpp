@@ -27,6 +27,16 @@ PhysicalTableScan::~PhysicalTableScan() {
 		auto &bd = bind_data->Cast<TableScanBindData>();
 		//std::cout << "    \"bloom_filter_on\": \"" << bd.table.name << "\"," << std::endl;
 	}
+	if (dynamic_filters && dynamic_filters->HasFilters()) {
+		/*
+		auto &bd = bind_data->Cast<TableScanBindData>();
+		const auto &tmp  = dynamic_filters->GetFinalTableFilters(*this, nullptr);
+		for (auto &f : tmp->filters) {
+			std::cout << f.second->ToString("foo") << " on " << bd.table.name << std::endl;
+		}
+			*/
+		//std::cout << "    \"bloom_filter_on\": \"" << bd.table.name << "\"," << std::endl;
+	}
 }
 
 class TableScanGlobalSourceState : public GlobalSourceState {
