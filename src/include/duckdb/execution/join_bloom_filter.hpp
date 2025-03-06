@@ -58,7 +58,8 @@ public:
 	}
 
 	double GetScarcity() const {
-		return static_cast<double>(bloom_filter_bits.CountValid(bloom_filter_size)) / static_cast<double>(bloom_filter_size);
+		return 0; //TODO
+		//return static_cast<double>(bloom_filter_bits.CountValid(bloom_filter_size)) / static_cast<double>(bloom_filter_size);
 	}
 
 	size_t GetSizeBits() const {
@@ -71,8 +72,9 @@ public:
 
 	JoinBloomFilter Copy() const {
 		JoinBloomFilter bf(column_ids, num_hash_functions, bloom_filter_size);
-		bf.bloom_filter_bits = bloom_filter_bits;
-		bf.bloom_data_buffer = bloom_data_buffer;
+		//bf.bloom_filter_bits = bloom_filter_bits;
+		//bf.bloom_data_buffer = bloom_data_buffer;
+		bf.register_blocked_bloom_filter = register_blocked_bloom_filter;
 		bf.num_inserted_keys = num_inserted_keys;
 		bf.num_probed_keys = num_probed_keys;
 		bf.build_time = build_time;
@@ -83,6 +85,10 @@ public:
 	}
 
 private:
+	idx_t GetBlockIdxForHash(hash_t hash) const;
+
+	uint64_t ConstructBlockMask(hash_t hash) const;
+
 	size_t HashToIndex(hash_t hash, size_t i) const;
 
 	void SetBloomBitsForHashes(size_t shift, Vector &hashes, const SelectionVector &rsel, idx_t count);
@@ -104,8 +110,7 @@ private:
 
 	vector<column_t> column_ids;
 
-	vector<validity_t> bloom_data_buffer;
-	ValidityMask bloom_filter_bits;
+	vector<uint64_t> register_blocked_bloom_filter;
 
 public:
 	uint64_t bitmask = DConstants::INVALID_INDEX;

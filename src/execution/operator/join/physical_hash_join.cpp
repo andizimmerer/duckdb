@@ -509,7 +509,7 @@ public:
 				for (idx_t i = 1; i < local_bfs.size(); i++) {
 					local_bfs[0]->Merge(*local_bfs[i]);
 				}
-				//local_bfs[0]->PrintBuildStats();
+				local_bfs[0]->PrintBuildStats();
 
 				if (!local_bfs[0]->ShouldDiscardAfterBuild()) {
 					for (auto &info : sink.op.filter_pushdown->probe_info) {

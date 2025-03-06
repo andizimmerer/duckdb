@@ -72,6 +72,20 @@ size_t ComputeNumHashFunctions(size_t expected_cardinality, size_t bloom_filter_
     return MinValue(MAX_HASH_FUNCTIONS, theoretical_optimum);
 }
 
+inline idx_t JoinBloomFilter::GetBlockIdxForHash(hash_t hash) const {
+    // TODO: use hash table radix bits to determine block?
+    // TODO: do we realistically need the  & 0xffffffff on register_blocked_bloom_filter.size()?
+    return (hash & bitmask); // ((hash & 0xffffffff) * (register_blocked_bloom_filter.size())) >> 32;
+}
+
+inline uint64_t JoinBloomFilter::ConstructBlockMask(hash_t hash) const {
+    uint64_t bit_pos_1 = (hash >> 48) & 0x3f;
+    uint64_t bit_pos_2 = (hash >> 32) & 0x3f;
+
+    uint64_t mask = ((1ull << bit_pos_1) | (1ull << bit_pos_2));
+    return mask;
+}
+
 inline size_t JoinBloomFilter::HashToIndex(hash_t hash, size_t i) const {
     // Rotate a single hash to produce multiple hashes. Shift by 32 digits to produce up to 2 non-overlapping hash function.
     const auto rot_hash = hash >> ((i << 5));
@@ -91,8 +105,8 @@ JoinBloomFilter::JoinBloomFilter(size_t expected_cardinality, double desired_fal
 	bloom_filter_size = ComputeBloomFilterSize(expected_cardinality, desired_false_positive_rate);
     num_hash_functions = ComputeNumHashFunctions(expected_cardinality, bloom_filter_size);
 
-    bloom_data_buffer.resize(bloom_filter_size / 64, 0);
-    bloom_filter_bits.Initialize(bloom_data_buffer.data(), bloom_filter_size);
+    register_blocked_bloom_filter.resize(bloom_filter_size / 64, 0);
+    //bloom_filter_bits.Initialize(bloom_data_buffer.data(), bloom_filter_size);
 
     if (USE_POWER_2_BF_SIZE) {
         size_t v = bloom_filter_size;
@@ -101,12 +115,13 @@ JoinBloomFilter::JoinBloomFilter(size_t expected_cardinality, double desired_fal
             v = v >> 1;
             bitmask = bitmask << 1 | 0x1;
         }
+        bitmask = bitmask >> 6;
     }
 }
 
 JoinBloomFilter::JoinBloomFilter(vector<column_t> column_ids, size_t num_hash_functions, size_t bloom_filter_size) : num_hash_functions(num_hash_functions), bloom_filter_size(bloom_filter_size), column_ids(std::move(column_ids))  {
-    bloom_data_buffer.resize(bloom_filter_size / 64, 0);
-    bloom_filter_bits.Initialize(bloom_data_buffer.data(), bloom_filter_size);
+    register_blocked_bloom_filter.resize(bloom_filter_size / 64, 0);
+    //bloom_filter_bits.Initialize(bloom_data_buffer.data(), bloom_filter_size);
 }
 
 JoinBloomFilter::~JoinBloomFilter() {
@@ -115,9 +130,11 @@ JoinBloomFilter::~JoinBloomFilter() {
 void JoinBloomFilter::Merge(const JoinBloomFilter &other) {
     D_ASSERT(bloom_filter_size == other.bloom_filter_size);
     D_ASSERT(num_hash_functions == other.num_hash_functions);
+    D_ASSERT(register_blocked_bloom_filter.size() == other.register_blocked_bloom_filter.size());
+    D_ASSERT(bitmask == other.bitmask);
 
-    for (size_t i = 0; i< bloom_data_buffer.size(); i++) {
-        bloom_data_buffer[i] |= other.bloom_data_buffer[i];
+    for (size_t i = 0; i< register_blocked_bloom_filter.size(); i++) {
+        register_blocked_bloom_filter[i] |= other.register_blocked_bloom_filter[i];
     }
     //for (size_t i = 0; i < bloom_filter_size; i++) {
     //    bloom_filter_bits.Set(i, bloom_filter_bits.RowIsValid(i) || other.bloom_filter_bits.RowIsValid(i));
@@ -132,8 +149,8 @@ inline void JoinBloomFilter::SetBloomBitsForHashes(size_t fni, Vector &hashes, c
 
     if (hashes.GetVectorType() == VectorType::CONSTANT_VECTOR) {
         auto hash = ConstantVector::GetData<hash_t>(hashes);
-		auto bloom_idx = HashToIndex(*hash, fni);
-        bloom_filter_bits.SetValid(bloom_idx);
+		auto block_idx = GetBlockIdxForHash(*hash);
+        register_blocked_bloom_filter[block_idx] |= ConstructBlockMask(*hash);
     } else {
         UnifiedVectorFormat u_hashes;
 		hashes.ToUnifiedFormat(count, u_hashes);
@@ -144,8 +161,8 @@ inline void JoinBloomFilter::SetBloomBitsForHashes(size_t fni, Vector &hashes, c
 			    auto hash_idx = u_hashes.sel->get_index(key_idx);
                 if (u_hashes.validity.RowIsValid(hash_idx)) {
                     auto hash = UnifiedVectorFormat::GetData<hash_t>(u_hashes)[hash_idx];
-                    auto bloom_idx = HashToIndex(hash, fni);
-                    bloom_filter_bits.SetValid(bloom_idx);
+                    auto block_idx = GetBlockIdxForHash(hash);
+                    register_blocked_bloom_filter[block_idx] |= ConstructBlockMask(hash);
                 }
             }
         } else {
@@ -154,8 +171,8 @@ inline void JoinBloomFilter::SetBloomBitsForHashes(size_t fni, Vector &hashes, c
 			    auto hash_idx = u_hashes.sel->get_index(key_idx);
                 auto* hashes = UnifiedVectorFormat::GetData<hash_t>(u_hashes);
                 auto hash = hashes[hash_idx];
-                auto bloom_idx = HashToIndex(hash, fni);
-                bloom_filter_bits.SetValid(bloom_idx);
+                auto block_idx = GetBlockIdxForHash(hash);
+                register_blocked_bloom_filter[block_idx] |= ConstructBlockMask(hash);
             }
         }
     }
@@ -167,9 +184,7 @@ void JoinBloomFilter::BuildWithPrecomputedHashes(Vector &hashes, const Selection
 
     // Rotate hash by a couple of bits to produce a new "hash value".
     // With this trick, keys have to be hashed only once.
-    for (idx_t i = 0; i < num_hash_functions; i++) {
-        SetBloomBitsForHashes(i, hashes, sel, count);
-    }
+    SetBloomBitsForHashes(0, hashes, sel, count);
     num_inserted_keys += count;
 
     p.End();
@@ -182,9 +197,9 @@ inline size_t JoinBloomFilter::ProbeInternal(size_t fni, Vector &hashes, Selecti
 
     if (hashes.GetVectorType() == VectorType::CONSTANT_VECTOR) {
         auto hash = ConstantVector::GetData<hash_t>(hashes);
-		auto bloom_idx = HashToIndex(*hash, fni);
-
-        if (bloom_filter_bits.RowIsValid(bloom_idx)) {
+		auto block_idx = GetBlockIdxForHash(*hash);
+        auto mask = ConstructBlockMask(*hash);
+        if ((register_blocked_bloom_filter[block_idx] & mask) == mask) {
             // All constant elements match. No need to modify the selection vector.
             return current_sel_count;
         } else {
@@ -203,8 +218,9 @@ inline size_t JoinBloomFilter::ProbeInternal(size_t fni, Vector &hashes, Selecti
                 if (u_hashes.validity.RowIsValid(hash_idx)) {
                     auto* hashes = UnifiedVectorFormat::GetData<hash_t>(u_hashes);
                     auto hash = hashes[hash_idx];
-                    auto bloom_idx = HashToIndex(hash, fni);
-                    if (bloom_filter_bits.RowIsValid(bloom_idx)) {
+                    auto block_idx = GetBlockIdxForHash(hash);
+                    auto mask = ConstructBlockMask(hash);
+                    if ((register_blocked_bloom_filter[block_idx] & mask) == mask) {
                         // Bit is set in Bloom-filter. We keep the entry for now.
                         tmp_sel.set_index(sel_out_idx++, key_idx);
                     }
@@ -220,8 +236,9 @@ inline size_t JoinBloomFilter::ProbeInternal(size_t fni, Vector &hashes, Selecti
 			    auto hash_idx = u_hashes.sel->get_index(key_idx);
                 auto* hashes = UnifiedVectorFormat::GetData<hash_t>(u_hashes);
                 auto hash = hashes[hash_idx];
-                auto bloom_idx = HashToIndex(hash, fni);
-                if (bloom_filter_bits.RowIsValid(bloom_idx)) {
+                auto block_idx = GetBlockIdxForHash(hash);
+                auto mask = ConstructBlockMask(hash);
+                if ((register_blocked_bloom_filter[block_idx] & mask) == mask) {
                     // Bit is set in Bloom-filter. We keep the entry for now.
                     tmp_sel.set_index(sel_out_idx++, key_idx);
                 }
@@ -246,13 +263,7 @@ size_t JoinBloomFilter::ProbeWithPrecomputedHashes(Vector &precomputed_hashes, S
     size_t sel_tmp_count = count;
 
     // Perform probing
-    for (idx_t i = 0; i < num_hash_functions; i++) {
-        sel_tmp_count = ProbeInternal(i, precomputed_hashes, sel, sel_tmp_count);
-        if (sel_tmp_count == 0) {
-            // All keys have been removed. No need to continue with further rounds.
-            break;
-        }
-    }
+    sel_tmp_count = ProbeInternal(0, precomputed_hashes, sel, sel_tmp_count);
 
     num_filtered_keys += (count - sel_tmp_count);
 
