@@ -7,6 +7,7 @@
 #include "duckdb/execution/join_hashtable.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
 #include <iostream>
+#include "duckdb/execution/PerfEvent.hpp"
 
 namespace duckdb {
 
@@ -236,6 +237,9 @@ size_t JoinBloomFilter::ProbeWithPrecomputedHashes(Vector &precomputed_hashes, S
     Profiler p;
     p.Start();
 
+    PerfEvent e;
+    e.startCounters();
+
     //probing_started = true;
     num_probed_keys += count;
 
@@ -251,6 +255,10 @@ size_t JoinBloomFilter::ProbeWithPrecomputedHashes(Vector &precomputed_hashes, S
     }
 
     num_filtered_keys += (count - sel_tmp_count);
+
+    e.stopCounters();
+    e.printReport(std::cout, count); // use n as scale factor
+    std::cout << std::endl;
 
     p.End();
     probe_time += p.Elapsed();
