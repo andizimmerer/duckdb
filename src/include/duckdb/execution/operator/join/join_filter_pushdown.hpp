@@ -11,6 +11,7 @@
 #include "duckdb/planner/column_binding.hpp"
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/table_filter.hpp"
+#include "duckdb/execution/physical_operator_states.hpp"
 
 namespace duckdb {
 class DataChunk;
@@ -30,6 +31,11 @@ struct JoinFilterGlobalState {
 
 	//! Global Min/Max aggregates for filter pushdown
 	unique_ptr<GlobalUngroupedAggregateState> global_aggregate_state;
+
+	//! Whether or not Bloom-filters for sideways-information-passing should be built
+	bool should_build_bloom_filter = false;
+	//! Bloom-filters built by each thread
+	vector<unique_ptr<JoinBloomFilter>> local_ht_bloom_filters;
 };
 
 struct JoinFilterLocalState {
@@ -75,6 +81,9 @@ public:
 private:
 	void PushInFilter(const JoinFilterPushdownFilter &info, JoinHashTable &ht, const PhysicalOperator &op,
 	                  idx_t filter_idx, idx_t filter_col_idx) const;
+	
+	void BuildAndPushBloomFilter(const JoinFilterPushdownFilter &info, JoinHashTable &ht, const PhysicalOperator &op,
+	                  			 vector<column_t> column_ids) const;
 };
 
 } // namespace duckdb

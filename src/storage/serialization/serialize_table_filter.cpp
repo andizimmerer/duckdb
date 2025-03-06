@@ -52,7 +52,7 @@ unique_ptr<TableFilter> TableFilter::Deserialize(Deserializer &deserializer) {
 		result = StructFilter::Deserialize(deserializer);
 		break;
 	default:
-		throw SerializationException("Unsupported type for deserialization of TableFilter!");
+		throw SerializationException("Unsupported type for deserialization of TableFilter! Got " + EnumUtil::ToString(filter_type));
 	}
 	return result;
 }
